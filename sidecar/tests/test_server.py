@@ -4,6 +4,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+import sidecar.server as server
 from sidecar.server import app, state
 from sidecar.repro.recorder import Recorder
 
@@ -16,6 +17,10 @@ def client(tmp_path, monkeypatch):
     state["backends"] = {}
     state["ssh"] = None
     state["llm"] = None
+    keychain = {"api_key": ""}
+    monkeypatch.setattr(server, "_keychain_api_key", lambda: keychain["api_key"])
+    monkeypatch.setattr(server, "_save_keychain_api_key", lambda key: keychain.update(api_key=key))
+    monkeypatch.setattr(server, "_delete_keychain_api_key", lambda: keychain.update(api_key=""))
     from sidecar.tools import uniprot, pdb, entrez, chembl  # noqa: F401
     with TestClient(app) as c:
         yield c

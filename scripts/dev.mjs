@@ -14,7 +14,7 @@ async function reachable(url, validate) {
 }
 
 function start(command, args, options = {}) {
-  const child = spawn(command, args, { stdio: "inherit", shell: process.platform === "win32", ...options });
+  const child = spawn(command, args, { stdio: "inherit", shell: false, ...options });
   children.push(child);
   child.on("exit", (code) => {
     if (code && !stopping) process.exitCode = code;

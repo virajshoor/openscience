@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchRun, reviewRun, exportRun } from "../lib/api";
+import { exportRun, fetchRun, reviewRun, verifyRun } from "../lib/api";
 import type { RunDetail } from "../lib/types";
 
 interface Props {
@@ -10,6 +10,7 @@ export default function RunInspector({ runId }: Props) {
   const [run, setRun] = useState<RunDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
+  const [verification, setVerification] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -40,6 +41,15 @@ export default function RunInspector({ runId }: Props) {
       await exportRun(runId);
     } catch (e) {
       // ignore
+    }
+  }
+
+  async function doVerify() {
+    try {
+      const result = await verifyRun(runId);
+      setVerification(result.ok ? "All output hashes verified." : "One or more outputs failed verification.");
+    } catch (e) {
+      setVerification(`Verification failed: ${String(e)}`);
     }
   }
 
@@ -98,7 +108,11 @@ export default function RunInspector({ runId }: Props) {
       </div>
 
       <div className="inspector-section">
-        <button className="btn" onClick={doExport}>Export run as JSON</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn" onClick={doExport}>Export run as JSON</button>
+          <button className="btn" onClick={doVerify}>Verify outputs</button>
+        </div>
+        {verification && <div style={{ fontSize: 12, marginTop: 8, color: verification.startsWith("All") ? "#58d4c4" : "#e76e76" }}>{verification}</div>}
       </div>
     </div>
   );

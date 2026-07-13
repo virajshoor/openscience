@@ -66,6 +66,10 @@ POST /review
 { "run_id": "abc123", "config": { ... } }
 ```
 
+## Verify outputs
+
+Use **Verify outputs** in the Run Inspector to recompute SHA-256 prefixes for every saved artifact. A run passes when every output filename prefix matches its current file content. The same check is available at `GET /runs/{run_id}/verify`.
+
 ## Run restoration
 
 Clicking a past run in the sidebar loads its conversation into the chat pane,

@@ -71,6 +71,12 @@ export async function exportRun(runId: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export async function verifyRun(runId: string): Promise<{ ok: boolean; outputs: Array<{ name: string; valid: boolean }> }> {
+  const r = await fetch(`${u()}/runs/${runId}/verify`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
 interface StreamCallbacks {
   onToken: (t: string) => void;
   onToolCall: (call: { id: string; name: string; arguments: Record<string, unknown> }) => void;

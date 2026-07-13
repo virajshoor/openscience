@@ -1,13 +1,16 @@
 # Development
 
+## Platform support
+
+Development and releases currently support **macOS on Apple Silicon (M1 or later)** only.
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org) 20+
 - [pnpm](https://pnpm.io) (`npm i -g pnpm`)
 - [Rust](https://rustup.rs) stable
 - [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- Tauri 2 system deps — see https://tauri.app/start/prerequisites/
-  - macOS: Xcode CLI tools (`xcode-select --install`)
+- Xcode CLI tools (`xcode-select --install`)
 
 ## Setup
 

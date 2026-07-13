@@ -10,6 +10,8 @@ Ollama, vLLM, Together, Groq, OpenRouter, Azure OpenAI, local Llama, etc.
 
 Licensed under **AGPL-3.0**.
 
+> **Platform support:** OpenScience currently supports **macOS on Apple Silicon (M1 or later)** only. Windows, Linux, and Intel Mac releases are not available yet.
+
 ![OpenScience UI with 3D protein viewer](preview.png)
 
 ---
@@ -73,14 +75,20 @@ numeric claim and citation against tool outputs. Verdicts:
 
 ## Quick start
 
+### Install the macOS app
+
+Download the Apple Silicon DMG or `.app` ZIP from the [GitHub release](https://github.com/virajshoor/openscience/releases/tag/v0.1.0). Drag OpenScience into Applications and open it. The release contains its own sidecar, so it does not require Python or `uv`.
+
+The current release is unsigned. On first launch, control-click OpenScience and choose **Open** if macOS displays a Gatekeeper warning.
+
 ### Prerequisites
 
+- macOS 14+ on Apple Silicon (M1 or later)
 - [Node.js](https://nodejs.org) 20+
 - [pnpm](https://pnpm.io) (`npm i -g pnpm`)
 - [Rust](https://rustup.rs) stable
 - [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- Tauri 2 system deps — see https://tauri.app/start/prerequisites/
-  - macOS: Xcode CLI tools (`xcode-select --install`)
+- Xcode CLI tools (`xcode-select --install`)
 
 ### Install
 
@@ -132,14 +140,14 @@ your model endpoint in the Settings modal (gear icon in the sidebar):
 |-------------------|------------------------------------------------------------------|
 | Endpoint          | `https://api.openai.com/v1` (or `http://localhost:11434/v1` for Ollama) |
 | API key           | `sk-...` (any non-empty string for local providers)              |
-| Model             | `gpt-4o-mini` (or `llama3.1`, `qwen2.5`, etc.)                    |
+| Model             | `gpt-5.4-mini` (or `llama3.1`, `qwen2.5`, etc.)                  |
 | Use tool-calling  | ✓ for OpenAI/Together/Groq; ✗ for some Ollama models (auto ReAct) |
 
 ### Configuration and security
 
-Your endpoint configuration and API key are stored locally in
-`~/.openscience/config.json`; they are not committed to this repository.
-Do not add API keys, SSH private keys, or run artifacts to source control.
+Endpoint, model, and tool preferences are stored in `~/.openscience/config.json`.
+Your API key is stored separately in the macOS Keychain and is not committed,
+included in run manifests, or written to browser localStorage.
 
 ### Try it
 

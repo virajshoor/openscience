@@ -55,7 +55,7 @@ on localhost.
 │    • config (endpoint, model, temperature, tools)    │
 │    • messages (last 250, no tool payloads)            │
 │    • computeBackend                                   │
-│    API key stored in ~/.openscience/config.json       │
+│    API key stored in macOS Keychain                   │
 │    via sidecar, not in browser storage               │
 └──────────────────────────────────────────────────────┘
 ```
@@ -80,11 +80,11 @@ on localhost.
 | Setting        | Browser localStorage | ~/.openscience/config.json | Run manifest |
 |----------------|----------------------|----------------------------|--------------|
 | base_url       | Yes                  | Yes                        | Yes          |
-| api_key        | No                   | Yes                        | No (redacted) |
+| api_key        | No                   | macOS Keychain             | No (redacted) |
 | model          | Yes                  | Yes                        | Yes          |
 | temperature    | Yes                  | Yes                        | Yes          |
 | use_tools      | Yes                  | Yes                        | Yes          |
 | compute        | Yes                  | Yes                        | Yes          |
 
-The API key persists across rebuilds and relaunches via the sidecar config file.
-It is never stored in browser localStorage or committed to the repository.
+The API key persists across rebuilds and relaunches through the macOS Keychain.
+It is never stored in browser localStorage, run manifests, or the repository.

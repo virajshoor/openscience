@@ -150,6 +150,8 @@ Content-Type: application/json
 {"base_url": "http://localhost:11434/v1", "model": "llama3.1"}
 ```
 
+When an `api_key` is supplied, OpenScience stores it in the macOS Keychain rather than in `config.json`.
+
 ```
 DELETE /config
 ```

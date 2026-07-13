@@ -92,7 +92,7 @@ export default function SettingsModal({ onClose }: Props) {
             onChange={(e) => setConfig({ apiKey: e.target.value })}
             placeholder="sk-…"
           />
-          <div className="field-hint">Stored locally in ~/.openscience/config.json. Never committed to the repository.</div>
+          <div className="field-hint">Stored in your macOS Keychain. Never written to runs or the repository.</div>
         </div>
 
         <div className="field">
@@ -101,7 +101,7 @@ export default function SettingsModal({ onClose }: Props) {
             id="cfg-model"
             value={config.model}
             onChange={(e) => setConfig({ model: e.target.value })}
-            placeholder="gpt-4.1-mini"
+            placeholder="gpt-5.4-mini"
           />
         </div>
 

@@ -8,7 +8,7 @@ attempting to interact with the sidecar.
 
 ## API key handling
 
-- API keys are persisted in `~/.openscience/config.json` (gitignored).
+- API keys are persisted in the macOS Keychain under the `ai.openscience.workbench` service.
 - They are NOT stored in browser localStorage.
 - They are redacted from run manifests before writing to disk.
 - They are never committed to the repository.

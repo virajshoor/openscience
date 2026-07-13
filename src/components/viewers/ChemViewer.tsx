@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import rdkitScriptUrl from "@rdkit/rdkit/dist/RDKit_minimal.js?url";
+import rdkitWasmUrl from "@rdkit/rdkit/dist/RDKit_minimal.wasm?url";
 
 interface Props {
   smiles: string;
@@ -7,7 +9,7 @@ interface Props {
 
 declare global {
   interface Window {
-    initRDKitModule?: (wasmPath: string) => Promise<any>;
+    initRDKitModule?: (options?: { locateFile?: (file: string) => string }) => Promise<any>;
     RDKit?: any;
   }
 }
@@ -19,20 +21,19 @@ async function loadRDKit(): Promise<any> {
   if (rdkitPromise) return rdkitPromise;
   rdkitPromise = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "https://unpkg.com/@rdkit/rdkit@2024.3.5-1.0.0/Code/MinimalLib/dist/RDKit_minimal.js";
+    s.src = rdkitScriptUrl;
     s.async = true;
     s.onload = async () => {
       try {
-        const rdkit = await (window as any).initRDKitModule(
-          "https://unpkg.com/@rdkit/rdkit@2024.3.5-1.0.0/Code/MinimalLib/dist/"
-        );
+        const rdkit = await window.initRDKitModule?.({ locateFile: () => rdkitWasmUrl });
+        if (!rdkit) throw new Error("RDKit initialization failed");
         window.RDKit = rdkit;
         resolve(rdkit);
       } catch (e) {
         reject(e);
       }
     };
-    s.onerror = () => reject(new Error("Failed to load RDKit"));
+    s.onerror = () => reject(new Error("Failed to load bundled RDKit"));
     document.head.appendChild(s);
   });
   return rdkitPromise;

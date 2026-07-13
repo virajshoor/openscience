@@ -141,3 +141,17 @@ class Recorder:
         if op.exists():
             out["outputs"] = [f.name for f in op.iterdir() if f.is_file()]
         return out
+
+    def verify_run(self, run_id: str) -> dict:
+        """Verify that content-addressed output filenames match their bytes."""
+        outputs_dir = self.runs_dir / run_id / "outputs"
+        if not outputs_dir.is_dir():
+            return {"ok": False, "error": "run outputs not found", "outputs": []}
+        outputs = []
+        for path in sorted(outputs_dir.iterdir()):
+            if not path.is_file():
+                continue
+            expected, separator, _ = path.name.partition("_")
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()[:8]
+            outputs.append({"name": path.name, "valid": bool(separator) and expected == actual})
+        return {"ok": all(output["valid"] for output in outputs), "outputs": outputs}
