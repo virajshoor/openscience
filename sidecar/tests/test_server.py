@@ -1,13 +1,11 @@
 """Tests for FastAPI sidecar routes."""
 
-import tempfile
 
 import pytest
 from fastapi.testclient import TestClient
 
-from sidecar.server import app, state, CONFIG_DIR
+from sidecar.server import app, state
 from sidecar.repro.recorder import Recorder
-from pathlib import Path
 
 
 @pytest.fixture

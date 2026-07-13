@@ -1,6 +1,5 @@
 """Tests for the ReAct parser and LLM client utilities."""
 
-import json
 
 from sidecar.llm.react import parse_react, REACT_SYSTEM_PROMPT
 

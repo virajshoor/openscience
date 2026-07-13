@@ -10,10 +10,8 @@ in the run directory.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
-from typing import Any
 
 REVIEW_SYSTEM = """You are an automated scientific reviewer. You are given a research conversation that
 included tool calls. Your job is to verify the assistant's final claims.

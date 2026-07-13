@@ -9,12 +9,24 @@ struct AppState {
 
 #[tauri::command]
 fn sidecar_port(state: tauri::State<AppState>) -> u16 {
-    state.sidecar.lock().unwrap().as_ref().map(|h| h.port).unwrap_or(0)
+    state
+        .sidecar
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|h| h.port)
+        .unwrap_or(0)
 }
 
 #[tauri::command]
 fn sidecar_health(state: tauri::State<AppState>) -> bool {
-    state.sidecar.lock().unwrap().as_ref().map(|h| h.is_healthy()).unwrap_or(false)
+    state
+        .sidecar
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|h| h.is_healthy())
+        .unwrap_or(false)
 }
 
 pub fn run() {

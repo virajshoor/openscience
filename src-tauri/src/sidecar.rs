@@ -29,14 +29,18 @@ impl SidecarHandle {
 pub fn spawn_sidecar() -> Result<SidecarHandle, String> {
     let port = pick_port();
     let port_str = port.to_string();
-    let runs_dir = home_runs_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+    let runs_dir = home_runs_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
 
     let mut cmd = build_command(&port_str, &runs_dir)?;
     cmd.stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    let child = cmd.spawn().map_err(|e| format!("failed to spawn sidecar: {e}"))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to spawn sidecar: {e}"))?;
 
     let handle = SidecarHandle { port, child };
 
@@ -73,9 +77,13 @@ fn build_command(port: &str, runs_dir: &str) -> Result<Command, String> {
     }
 
     // Fallback: python -m sidecar
-    let py = which::which("python3").or_else(|_| which::which("python")).map_err(|e| e.to_string())?;
+    let py = which::which("python3")
+        .or_else(|_| which::which("python"))
+        .map_err(|e| e.to_string())?;
     let mut cmd = Command::new(py);
-    cmd.current_dir(&sidecar_dir).arg("-m").arg("sidecar.__main__");
+    cmd.current_dir(&sidecar_dir)
+        .arg("-m")
+        .arg("sidecar.__main__");
     cmd.env("OS_SIDECAR_PORT", port);
     if !runs_dir.is_empty() {
         cmd.env("OS_RUNS_DIR", runs_dir);
@@ -87,7 +95,10 @@ fn find_sidecar_dir() -> Result<PathBuf, String> {
     // Try relative to current exe (release build)
     let from_exe = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|n| n.join("..").join("sidecar").canonicalize().ok()))
+        .and_then(|p| {
+            p.parent()
+                .map(|n| n.join("..").join("sidecar").canonicalize().ok())
+        })
         .flatten();
     if let Some(p) = from_exe {
         if p.join("pyproject.toml").exists() {
@@ -97,7 +108,11 @@ fn find_sidecar_dir() -> Result<PathBuf, String> {
 
     // Dev: relative to CARGO_MANIFEST_DIR via env, or look for sibling sidecar/
     let candidates = [
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("sidecar").canonicalize().ok(),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("sidecar")
+            .canonicalize()
+            .ok(),
         PathBuf::from("../sidecar").canonicalize().ok(),
         PathBuf::from("sidecar").canonicalize().ok(),
     ];

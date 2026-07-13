@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-from typing import Optional
 
 from .base import ComputeBackend, RunResult
 

@@ -101,7 +101,7 @@ export default function SettingsModal({ onClose }: Props) {
             id="cfg-model"
             value={config.model}
             onChange={(e) => setConfig({ model: e.target.value })}
-            placeholder="gpt-4o-mini"
+            placeholder="gpt-4.1-mini"
           />
         </div>
 

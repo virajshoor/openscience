@@ -61,6 +61,13 @@ function conversationToMessages(run: { conversation?: Array<Record<string, unkno
   return out;
 }
 
+const COMPOUNDING_SYSTEM_PROMPT = `You are OpenScience, an AI research assistant specialized in scientific data.
+Below is an accumulated understanding of the user's research context, built from prior conversations.
+Use this to provide more accurate, contextual responses. Do not mention this context explicitly.
+
+Accumulated science context:
+{science_context}`;
+
 export default function App() {
   const setSidecarOnline = useSession((s) => s.setSidecarOnline);
   const sidecarOnline = useSession((s) => s.sidecarOnline);
@@ -73,10 +80,16 @@ export default function App() {
   const setError = useSession((s) => s.setError);
   const error = useSession((s) => s.error);
   const setViewer = useSession((s) => s.setViewer);
+  const viewer = useSession((s) => s.viewer);
   const pushMessage = useSession((s) => s.pushMessage);
   const appendAssistant = useSession((s) => s.appendAssistant);
+  const chatCount = useSession((s) => s.chatCount);
+  const incrementChatCount = useSession((s) => s.incrementChatCount);
+  const scienceContext = useSession((s) => s.scienceContext);
+  const setScienceContext = useSession((s) => s.setScienceContext);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [compounding, setCompounding] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const viewingRun = useRef(false);
 
@@ -131,6 +144,15 @@ export default function App() {
     const run = await fetchRun(runId);
     const restored = conversationToMessages(run);
     for (const m of restored) pushMessage(m);
+    // Restore the viewer from the run's tool results if present
+    for (const entry of run.conversation ?? []) {
+      const payload = entry["payload"] as Record<string, unknown> | undefined;
+      if (payload?.["result"]) {
+        const result = payload["result"] as Record<string, unknown>;
+        const v = result["viewer"];
+        if (v) setViewer(v as never);
+      }
+    }
   }
 
   function newConversation() {
@@ -139,13 +161,103 @@ export default function App() {
     viewingRun.current = false;
   }
 
+  async function maybeCompoundScienceContext() {
+    const count = useSession.getState().chatCount;
+    if (count > 0 && count % 10 === 0) {
+      setCompounding(true);
+      try {
+        const recentMessages = useSession.getState().messages
+          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+          .slice(-40)
+          .map((m) => `${m.role}: ${m.content}`)
+          .join("\n\n");
+
+        const existingContext = useSession.getState().scienceContext;
+        const compoundPrompt = `You are building an accumulated understanding of a researcher's work.
+Below is the existing context (if any) and recent conversation messages.
+Synthesize a concise summary (max 500 words) of key scientific themes, tools used, entities studied,
+methods, and patterns. This will help provide better responses in future conversations.
+
+Existing context:
+${existingContext || "(none yet)"}
+
+Recent messages:
+${recentMessages}
+
+Output only the synthesized context, no preamble.`;
+
+        const r = await fetch(`${getSidecarUrlSafe()}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: compoundPrompt }],
+            config: {
+              base_url: useSession.getState().config.baseUrl,
+              api_key: useSession.getState().config.apiKey,
+              model: useSession.getState().config.model,
+              temperature: 0.1,
+              use_tools: false,
+            },
+            compute: "local",
+          }),
+        });
+
+        if (r.ok && r.body) {
+          const reader = r.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let contextText = "";
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split("\n\n");
+            buffer = parts.pop() || "";
+            for (const part of parts) {
+              const trimmed = part.trim();
+              if (!trimmed.startsWith("data:")) continue;
+              const payload = trimmed.slice(5).trim();
+              if (!payload || payload === "[DONE]") continue;
+              try {
+                const evt = JSON.parse(payload);
+                if (evt.event === "token" && evt.data?.text) contextText += evt.data.text;
+              } catch { /* skip */ }
+            }
+          }
+          if (contextText.trim()) {
+            setScienceContext(contextText.trim());
+          }
+        }
+      } catch {
+        // best-effort, don't block the user
+      } finally {
+        setCompounding(false);
+      }
+    }
+  }
+
+  function getSidecarUrlSafe(): string {
+    return (window as unknown as { __openscience_sidecar_url?: string }).__openscience_sidecar_url || "http://127.0.0.1:7100";
+  }
+
   async function send(text: string) {
     if (!text.trim() || streaming) return;
     viewingRun.current = false;
 
-    const history = messages
-      .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
-      .map((m) => ({ role: m.role, content: m.content }));
+    // Build history with science context as a system message if available
+    const history: Array<{ role: string; content: string }> = [];
+    const ctx = useSession.getState().scienceContext;
+    if (ctx) {
+      history.push({
+        role: "system",
+        content: COMPOUNDING_SYSTEM_PROMPT.replace("{science_context}", ctx),
+      });
+    }
+    history.push(
+      ...messages
+        .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+        .map((m) => ({ role: m.role, content: m.content }))
+    );
     history.push({ role: "user", content: text });
 
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: text, ts: Date.now() };
@@ -188,6 +300,8 @@ export default function App() {
       clearTimeout(timeoutId);
       abortRef.current = null;
       setStreaming(false);
+      incrementChatCount();
+      maybeCompoundScienceContext();
     }
   }
 
@@ -218,6 +332,11 @@ export default function App() {
         </div>
 
         <div className="sidebar-bottom">
+          {compounding && (
+            <div style={{ fontSize: 10, color: "#58d4c4", padding: "4px 0", textAlign: "center" }}>
+              Compounding science context...
+            </div>
+          )}
           <button className="btn" onClick={() => setSettingsOpen(true)} style={{ width: "100%" }}>
             <IconSettings size={14} style={{ verticalAlign: "middle", marginRight: 6 }} />
             Settings
@@ -239,6 +358,11 @@ export default function App() {
               <IconMicroscope size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
               {computeBackend}
             </span>
+            {scienceContext && (
+              <span className="pill" title="Accumulated science context from prior chats">
+                ctx: {Math.round(scienceContext.length / 100) / 10}k
+              </span>
+            )}
           </div>
           <div>
             <button className="btn" onClick={refresh}>
