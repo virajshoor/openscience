@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 
-import httpx
 
+from ..http import async_client
 from .registry import tool
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -24,7 +24,7 @@ EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
     },
 )
 async def entrez_search(db: str, query: str, max: int = 10) -> dict:
-    async with httpx.AsyncClient(timeout=30) as c:
+    async with async_client(30) as c:
         r = await c.get(
             f"{EUTILS}/esearch.fcgi",
             params={"db": db, "term": query, "retmax": max, "retmode": "json"},
@@ -51,7 +51,7 @@ async def entrez_search(db: str, query: str, max: int = 10) -> dict:
     },
 )
 async def entrez_fetch(db: str, id: str, rettype: str = "fasta", recorder=None, run_id=None) -> dict:
-    async with httpx.AsyncClient(timeout=30) as c:
+    async with async_client(30) as c:
         r = await c.get(
             f"{EUTILS}/efetch.fcgi",
             params={"db": db, "id": id, "rettype": rettype, "retmode": "text"},

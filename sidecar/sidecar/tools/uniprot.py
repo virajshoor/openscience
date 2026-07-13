@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import httpx
 
+from ..http import async_client
 from .registry import tool
 
 UNIPROT_API = "https://rest.uniprot.org/uniprotkb"
@@ -21,7 +21,7 @@ UNIPROT_API = "https://rest.uniprot.org/uniprotkb"
     },
 )
 async def uniprot_fetch(accession: str) -> dict:
-    async with httpx.AsyncClient(timeout=30) as c:
+    async with async_client(30) as c:
         r = await c.get(f"{UNIPROT_API}/{accession}.json")
     if r.status_code != 200:
         return {"error": f"UniProt {r.status_code}: {r.text[:200]}"}

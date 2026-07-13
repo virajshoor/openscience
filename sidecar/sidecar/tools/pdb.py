@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 
-import httpx
 
+from ..http import async_client
 from .registry import tool
 
 RCSB_API = "https://data.rcsb.org/rest/v1"
@@ -25,7 +25,7 @@ RCSB_FILES = "https://files.rcsb.org/download"
 )
 async def pdb_fetch(pdb_id: str, format: str = "pdb", recorder=None, run_id=None) -> dict:
     pdb_id = pdb_id.upper()
-    async with httpx.AsyncClient(timeout=60) as c:
+    async with async_client(60) as c:
         # Metadata
         meta_r = await c.get(f"{RCSB_API}/core/entry/{pdb_id}")
         meta = meta_r.json() if meta_r.status_code == 200 else {}
@@ -69,7 +69,7 @@ async def pdb_search(query: str) -> dict:
         "return_type": "entry",
         "request_options": {"paginate": {"start": 0, "rows": 10}},
     }
-    async with httpx.AsyncClient(timeout=30) as c:
+    async with async_client(30) as c:
         r = await c.post("https://search.rcsb.org/rcsbsearch/v2/query", json=body)
     if r.status_code != 200:
         return {

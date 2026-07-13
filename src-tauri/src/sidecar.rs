@@ -5,7 +5,6 @@
 
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
 
 pub struct SidecarHandle {
     pub port: u16,
@@ -42,19 +41,10 @@ pub fn spawn_sidecar() -> Result<SidecarHandle, String> {
         .spawn()
         .map_err(|e| format!("failed to spawn sidecar: {e}"))?;
 
-    let handle = SidecarHandle { port, child };
-
-    // Wait up to 15s for health
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(15) {
-        if handle.is_healthy() {
-            log::info!("sidecar healthy on port {port}");
-            return Ok(handle);
-        }
-        std::thread::sleep(Duration::from_millis(300));
-    }
-    log::warn!("sidecar did not report healthy within 15s — UI will retry");
-    Ok(handle)
+    // Do not block the macOS window on PyInstaller extraction and server startup.
+    // The React UI polls /health and transitions from offline once it is ready.
+    log::info!("sidecar started on port {port}");
+    Ok(SidecarHandle { port, child })
 }
 
 fn build_command(port: &str, runs_dir: &str) -> Result<Command, String> {

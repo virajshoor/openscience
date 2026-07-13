@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import httpx
 
+from ..http import async_client
 from .registry import tool
 
 CHEMBL_API = "https://www.ebi.ac.uk/chembl/api/data"
@@ -20,7 +20,7 @@ CHEMBL_API = "https://www.ebi.ac.uk/chembl/api/data"
 )
 async def chembl_fetch(chembl_id: str, recorder=None, run_id=None) -> dict:
     headers = {"Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=30) as c:
+    async with async_client(30) as c:
         r = await c.get(f"{CHEMBL_API}/molecule/{chembl_id}.json", headers=headers)
     if r.status_code != 200:
         return {"error": f"ChEMBL {r.status_code}"}
@@ -59,7 +59,7 @@ async def chembl_fetch(chembl_id: str, recorder=None, run_id=None) -> dict:
 async def chembl_search(name: str) -> dict:
     headers = {"Accept": "application/json"}
     params = {"molecule_synonyms": name, "limit": 10, "format": "json"}
-    async with httpx.AsyncClient(timeout=30) as c:
+    async with async_client(30) as c:
         r = await c.get(f"{CHEMBL_API}/molecule.json", params=params, headers=headers)
     if r.status_code != 200:
         return {"summary": f"ChEMBL search '{name}': no results or error."}

@@ -9,6 +9,7 @@ from typing import Any, AsyncIterator, List, Optional
 
 import httpx
 
+from ..http import async_client
 from .react import parse_react, ReActStep, REACT_SYSTEM_PROMPT
 from .reviewer import Reviewer
 
@@ -31,7 +32,7 @@ class LLMClient:
 
     async def client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=30.0))
+            self._client = async_client(httpx.Timeout(300.0, connect=30.0))
         return self._client
 
     async def _post(
