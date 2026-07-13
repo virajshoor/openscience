@@ -15,6 +15,7 @@ interface Props {
 
 export default function ChatPanel({ messages, onSend, onStop, streaming, error }: Props) {
   const [input, setInput] = useState("");
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -26,10 +27,33 @@ export default function ChatPanel({ messages, onSend, onStop, streaming, error }
     if (!input.trim() || streaming) return;
     onSend(input.trim());
     setInput("");
+    setHistoryIndex(null);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   }
 
   function handleKey(e: React.KeyboardEvent) {
+    const prompts = messages.filter((m) => m.role === "user").map((m) => m.content);
+    if (e.key === "ArrowUp" && !streaming && prompts.length > 0) {
+      e.preventDefault();
+      const next = historyIndex === null ? prompts.length - 1 : Math.max(0, historyIndex - 1);
+      setHistoryIndex(next);
+      setInput(prompts[next]);
+      requestAnimationFrame(autoGrow);
+      return;
+    }
+    if (e.key === "ArrowDown" && historyIndex !== null) {
+      e.preventDefault();
+      const next = historyIndex + 1;
+      if (next >= prompts.length) {
+        setHistoryIndex(null);
+        setInput("");
+      } else {
+        setHistoryIndex(next);
+        setInput(prompts[next]);
+      }
+      requestAnimationFrame(autoGrow);
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -94,7 +118,7 @@ export default function ChatPanel({ messages, onSend, onStop, streaming, error }
           className="chat-input"
           placeholder="Ask a research question…  (Enter to send, Shift+Enter for newline)"
           value={input}
-          onChange={(e) => { setInput(e.target.value); autoGrow(); }}
+          onChange={(e) => { setInput(e.target.value); setHistoryIndex(null); autoGrow(); }}
           onKeyDown={handleKey}
           rows={1}
         />

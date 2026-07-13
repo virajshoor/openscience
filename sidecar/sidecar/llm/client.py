@@ -52,7 +52,9 @@ class LLMClient:
         }
         if tools and config.get("use_tools", True):
             body["tools"] = tools
-        headers = {"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"}
+        if cfg["api_key"]:
+            headers["Authorization"] = f"Bearer {cfg['api_key']}"
         client = await self.client()
         return await client.post(url, json=body, headers=headers, timeout=None)
 
@@ -72,11 +74,14 @@ class LLMClient:
         if tools and config.get("use_tools", True):
             body["tools"] = tools
         client = await self.client()
+        headers = {"Content-Type": "application/json"}
+        if cfg["api_key"]:
+            headers["Authorization"] = f"Bearer {cfg['api_key']}"
         request = client.build_request(
             "POST",
             cfg["base_url"].rstrip("/") + "/chat/completions",
             json=body,
-            headers={"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"},
+            headers=headers,
         )
         return await client.send(request, stream=True)
 
