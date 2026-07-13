@@ -39,7 +39,7 @@ class LLMClient:
     ) -> httpx.Response:
         cfg = {
             "base_url": config.get("base_url", os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")),
-            "api_key": config.get("api_key", os.environ.get("OPENAI_API_KEY", "")),
+            "api_key": str(config.get("api_key", os.environ.get("OPENAI_API_KEY", "")) or "").strip(),
             "model": config.get("model", os.environ.get("OPENAI_MODEL", "gpt-4o-mini")),
             "temperature": float(config.get("temperature", 0.2)),
         }
@@ -61,7 +61,7 @@ class LLMClient:
     async def _stream_post(self, config: dict, messages: list, tools: list | None = None) -> httpx.Response:
         cfg = {
             "base_url": config.get("base_url", os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")),
-            "api_key": config.get("api_key", os.environ.get("OPENAI_API_KEY", "")),
+            "api_key": str(config.get("api_key", os.environ.get("OPENAI_API_KEY", "")) or "").strip(),
             "model": config.get("model", os.environ.get("OPENAI_MODEL", "gpt-4o-mini")),
             "temperature": float(config.get("temperature", 0.2)),
         }

@@ -71,7 +71,7 @@ When you want to use a tool, respond with EXACTLY this format:
 
 Thought: <your reasoning>
 Action: ```json
-{"tool": "<tool_name>", "input": {<arguments>}}
+{{"tool": "<tool_name>", "input": {{<arguments>}}}}
 ```
 
 After the tool result is returned, you may continue reasoning or give a final answer.
