@@ -28,6 +28,8 @@ __pycache__/
 # Tauri / Rust
 src-tauri/target/
 src-tauri/gen/schemas/
+src-tauri/binaries/
+src-tauri/.sidecar-build/
 
 # Editor
 .vscode/

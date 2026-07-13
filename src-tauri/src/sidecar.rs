@@ -58,6 +58,12 @@ pub fn spawn_sidecar() -> Result<SidecarHandle, String> {
 }
 
 fn build_command(port: &str, runs_dir: &str) -> Result<Command, String> {
+    if let Some(binary) = bundled_sidecar() {
+        let mut cmd = Command::new(binary);
+        configure_command(&mut cmd, port, runs_dir);
+        return Ok(cmd);
+    }
+
     let sidecar_dir = find_sidecar_dir()?;
 
     // Prefer uv if available
@@ -68,11 +74,7 @@ fn build_command(port: &str, runs_dir: &str) -> Result<Command, String> {
             .arg("python")
             .arg("-m")
             .arg("sidecar.__main__");
-        cmd.env("OS_SIDECAR_PORT", port);
-        cmd.env("OS_SIDECAR_HOST", "127.0.0.1");
-        if !runs_dir.is_empty() {
-            cmd.env("OS_RUNS_DIR", runs_dir);
-        }
+        configure_command(&mut cmd, port, runs_dir);
         return Ok(cmd);
     }
 
@@ -84,11 +86,36 @@ fn build_command(port: &str, runs_dir: &str) -> Result<Command, String> {
     cmd.current_dir(&sidecar_dir)
         .arg("-m")
         .arg("sidecar.__main__");
+    configure_command(&mut cmd, port, runs_dir);
+    Ok(cmd)
+}
+
+fn configure_command(cmd: &mut Command, port: &str, runs_dir: &str) {
     cmd.env("OS_SIDECAR_PORT", port);
+    cmd.env("OS_SIDECAR_HOST", "127.0.0.1");
     if !runs_dir.is_empty() {
         cmd.env("OS_RUNS_DIR", runs_dir);
     }
-    Ok(cmd)
+}
+
+fn bundled_sidecar() -> Option<PathBuf> {
+    let target = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", "aarch64") => "aarch64-apple-darwin",
+        ("macos", "x86_64") => "x86_64-apple-darwin",
+        ("windows", "x86_64") => "x86_64-pc-windows-msvc.exe",
+        ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
+        _ => return None,
+    };
+    let exe = std::env::current_exe().ok()?;
+    let app_dir = exe.parent()?;
+    let target_binary = app_dir.join(format!("openscience-sidecar-{target}"));
+    if target_binary.exists() {
+        return Some(target_binary);
+    }
+    // Tauri strips the target-triple suffix when it copies an external binary
+    // into a macOS .app bundle.
+    let bundled_binary = app_dir.join("openscience-sidecar");
+    bundled_binary.exists().then_some(bundled_binary)
 }
 
 fn find_sidecar_dir() -> Result<PathBuf, String> {

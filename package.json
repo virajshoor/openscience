@@ -12,7 +12,8 @@
     "tauri": "tauri",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "sidecar": "cd sidecar && OS_SIDECAR_PORT=7100 OS_RUNS_DIR=~/.openscience/runs uv run python -m sidecar.__main__"
+    "sidecar": "cd sidecar && OS_SIDECAR_PORT=7100 OS_RUNS_DIR=~/.openscience/runs uv run python -m sidecar.__main__",
+    "sidecar:bundle": "node scripts/build-sidecar.mjs"
   },
   "dependencies": {
     "@mantine/core": "^7.13.0",

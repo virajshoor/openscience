@@ -5,12 +5,14 @@ import os
 
 import uvicorn
 
+from .server import app
+
 
 def main():
     host = os.environ.get("OS_SIDECAR_HOST", "127.0.0.1")
     port = int(os.environ.get("OS_SIDECAR_PORT", "7100"))
     uvicorn.run(
-        "sidecar.server:app",
+        app,
         host=host,
         port=port,
         log_level="info",
