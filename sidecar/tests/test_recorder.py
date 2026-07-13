@@ -38,12 +38,11 @@ def test_run_id_is_hex():
 def test_list_runs_sorted_recent_first():
     with tempfile.TemporaryDirectory() as d:
         r = Recorder(d)
-        id1 = r.start({})
-        id2 = r.start({})
+        r.start({})
+        r.start({})
         runs = r.list_runs()
         assert len(runs) == 2
-        times = [run["started_at"] for run in runs]
-        assert times[0] >= times[1]
+        assert runs[0]["started_at"] >= runs[1]["started_at"]
 
 
 def test_read_run_returns_outputs():

@@ -97,7 +97,7 @@ class Recorder:
         out = []
         if not self.runs_dir.exists():
             return out
-        for d in sorted(self.runs_dir.iterdir(), reverse=True):
+        for d in self.runs_dir.iterdir():
             if not d.is_dir():
                 continue
             mp = d / "manifest.json"
@@ -120,6 +120,7 @@ class Recorder:
                 "model": m.get("config", {}).get("model"),
                 "review": review_verdict,
             })
+        out.sort(key=lambda r: r.get("started_at") or 0, reverse=True)
         return out
 
     def read_run(self, run_id: str) -> dict | None:
