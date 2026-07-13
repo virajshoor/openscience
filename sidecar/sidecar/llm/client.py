@@ -56,6 +56,30 @@ class LLMClient:
         client = await self.client()
         return await client.post(url, json=body, headers=headers, timeout=None)
 
+    async def _stream_post(self, config: dict, messages: list, tools: list | None = None) -> httpx.Response:
+        cfg = {
+            "base_url": config.get("base_url", os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")),
+            "api_key": config.get("api_key", os.environ.get("OPENAI_API_KEY", "")),
+            "model": config.get("model", os.environ.get("OPENAI_MODEL", "gpt-4o-mini")),
+            "temperature": float(config.get("temperature", 0.2)),
+        }
+        body: dict = {
+            "model": cfg["model"],
+            "messages": messages,
+            "temperature": cfg["temperature"],
+            "stream": True,
+        }
+        if tools and config.get("use_tools", True):
+            body["tools"] = tools
+        client = await self.client()
+        request = client.build_request(
+            "POST",
+            cfg["base_url"].rstrip("/") + "/chat/completions",
+            json=body,
+            headers={"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"},
+        )
+        return await client.send(request, stream=True)
+
     async def run(
         self,
         messages: list,
@@ -86,19 +110,24 @@ class LLMClient:
 
         for _ in range(max_iters):
             try:
-                resp = await self._post(config, conv, tools=tool_schemas, stream=True)
+                resp = await self._stream_post(config, conv, tools=tool_schemas)
             except Exception as e:
                 yield {"event": "error", "data": {"message": str(e)}}
                 break
 
             if resp.status_code != 200:
-                err_text = resp.text[:500]
+                err_text = (await resp.aread()).decode(errors="replace")[:500]
+                await resp.aclose()
                 yield {"event": "error", "data": {"message": f"LLM {resp.status_code}: {err_text}"}}
                 break
 
-            assistant_msg, deltas = await self._consume_stream(resp)
-            for d in deltas:
-                yield {"event": "token", "data": {"text": d}}
+            assistant_msg: dict = {}
+            async for event in self._consume_stream(resp):
+                if event["event"] == "assistant":
+                    assistant_msg = event["data"]
+                else:
+                    yield event
+            await resp.aclose()
 
             conv.append(assistant_msg)
             recorder.append(run_id, "assistant", assistant_msg)
@@ -192,10 +221,9 @@ class LLMClient:
             for i, s in enumerate(steps)
         ]
 
-    async def _consume_stream(self, resp: httpx.Response) -> tuple[dict, list[str]]:
-        """Consume an SSE stream, returning the assembled assistant message + delta list."""
+    async def _consume_stream(self, resp: httpx.Response) -> AsyncIterator[dict]:
+        """Consume an upstream SSE stream while yielding content deltas immediately."""
         assistant: dict = {"role": "assistant", "content": ""}
-        deltas: list[str] = []
         tool_calls: dict[int, dict] = {}
 
         async for line in resp.aiter_lines():
@@ -212,7 +240,7 @@ class LLMClient:
                 delta = choice.get("delta", {})
                 if delta.get("content"):
                     assistant["content"] += delta["content"]
-                    deltas.append(delta["content"])
+                    yield {"event": "token", "data": {"text": delta["content"]}}
                 if delta.get("tool_calls"):
                     for tc in delta["tool_calls"]:
                         idx = tc.get("index", 0)
@@ -228,4 +256,4 @@ class LLMClient:
 
         if tool_calls:
             assistant["tool_calls"] = [tool_calls[i] for i in sorted(tool_calls)]
-        return assistant, deltas
+        yield {"event": "assistant", "data": assistant}

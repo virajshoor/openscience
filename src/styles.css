@@ -44,6 +44,12 @@ html, body, #root {
   color: #58d4c4;
 }
 
+.sidebar-brand-logo {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+}
+
 .sidebar-brand-dot {
   width: 8px;
   height: 8px;

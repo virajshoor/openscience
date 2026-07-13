@@ -74,7 +74,18 @@ export const useSession = create<SessionState>()(
     }),
     {
       name: "openscience-session",
-      partialize: (s) => ({ config: s.config, computeBackend: s.computeBackend }),
+      version: 2,
+      migrate: (persisted) => {
+        const state = persisted as { config?: Partial<LLMConfig>; computeBackend?: string };
+        return {
+          config: { ...defaultConfig, ...state.config, apiKey: "" },
+          computeBackend: state.computeBackend ?? "local",
+        };
+      },
+      partialize: (s) => ({
+        config: { ...s.config, apiKey: "" },
+        computeBackend: s.computeBackend,
+      }),
     }
   )
 );

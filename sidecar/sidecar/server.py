@@ -34,12 +34,14 @@ SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 CONFIG_DIR = Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience")))
 CONFIG_FILE = CONFIG_DIR / "config.json"
+PERSISTED_CONFIG_KEYS = {"base_url", "model", "temperature", "use_tools", "compute"}
 
 
 def load_config() -> dict:
     if CONFIG_FILE.exists():
         try:
-            return json.loads(CONFIG_FILE.read_text())
+            config = json.loads(CONFIG_FILE.read_text())
+            return {key: value for key, value in config.items() if key in PERSISTED_CONFIG_KEYS}
         except json.JSONDecodeError:
             pass
     return {}
@@ -47,7 +49,8 @@ def load_config() -> dict:
 
 def save_config(cfg: dict) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+    config = {key: value for key, value in cfg.items() if key in PERSISTED_CONFIG_KEYS}
+    CONFIG_FILE.write_text(json.dumps(config, indent=2))
 
 
 @asynccontextmanager
@@ -70,7 +73,9 @@ app = FastAPI(title="OpenScience Sidecar", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.environ.get(
+        "OS_ALLOWED_ORIGINS", "http://localhost:1420,http://127.0.0.1:1420,tauri://localhost"
+    ).split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -167,13 +172,13 @@ async def get_output(run_id: str, filename: str):
 
 @app.get("/config")
 async def get_config():
-    """Return persisted user config (endpoint, model, API key, etc.)."""
+    """Return non-secret persisted endpoint and model preferences."""
     return load_config()
 
 
 @app.post("/config")
 async def save_user_config(req: dict):
-    """Persist user config to ~/.openscience/config.json. Survives reinstalls."""
+    """Persist non-secret preferences to ~/.openscience/config.json."""
     save_config(req)
     return {"ok": True}
 

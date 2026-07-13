@@ -1,12 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "default",
-  "description": "Default capability — allows sidecar + shell",
+  "description": "Default capability for the OpenScience window",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "shell:default",
-    "shell:allow-spawn",
-    "shell:allow-execute"
-  ]
+  "permissions": ["core:default"]
 }

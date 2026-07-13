@@ -25,7 +25,8 @@ class SSHBackend(ComputeBackend):
         self.port = port
         self.key_path = key_path or os.path.expanduser("~/.ssh/id_rsa")
         self._client = paramiko.SSHClient()
-        self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self._client.load_system_host_keys()
+        self._client.set_missing_host_key_policy(paramiko.RejectPolicy())
         try:
             self._client.connect(host, port=port, username=user, key_filename=key_path, timeout=10)
         except Exception:
@@ -37,7 +38,8 @@ class SSHBackend(ComputeBackend):
             import paramiko
 
             self._client = paramiko.SSHClient()
-            self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self._client.load_system_host_keys()
+            self._client.set_missing_host_key_policy(paramiko.RejectPolicy())
             self._client.connect(self.host, port=self.port, username=self.user, key_filename=self.key_path, timeout=10)
 
     async def run(self, command: str, timeout: int = 3600) -> RunResult:

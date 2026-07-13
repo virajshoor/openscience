@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { IconSettings, IconRefresh, IconBrain, IconMicroscope, IconHistory } from "@tabler/icons-react";
+import openScienceLogo from "./assets/openscience-logo.svg";
 import { useSession, setSidecarUrl } from "./stores/session";
 import { checkHealth, fetchRuns, streamChat, loadPersistedConfig, persistConfig } from "./lib/api";
 import ChatPanel from "./components/ChatPanel";
@@ -162,6 +163,7 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
+          <img className="sidebar-brand-logo" src={openScienceLogo} alt="OpenScience logo" />
           <span className={`sidebar-brand-dot ${sidecarOnline ? "" : "offline"}`} />
           OpenScience
         </div>
@@ -214,7 +216,7 @@ export default function App() {
         <div className="workspace">
           <div className="pane">
             <div className="pane-header">Conversation</div>
-            <ChatPanel messages={messages} onSend={send} streaming={streaming} error={error} />
+            <ChatPanel messages={messages} onSend={send} onStop={stop} streaming={streaming} error={error} />
           </div>
           <div className="pane">
             <div className="pane-header">

@@ -48,6 +48,7 @@ class Recorder:
         run_id = uuid.uuid4().hex[:12]
         run_dir = self.runs_dir / run_id
         (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+        safe_config = {key: value for key, value in config.items() if key not in {"api_key", "apiKey"}}
         manifest = {
             "run_id": run_id,
             "started_at": time.time(),
@@ -55,7 +56,7 @@ class Recorder:
             "python": sys.version,
             "platform": platform.platform(),
             "git_commit": _git_hash(),
-            "config": config,
+            "config": safe_config,
             "env": _pip_freeze(),
         }
         (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))

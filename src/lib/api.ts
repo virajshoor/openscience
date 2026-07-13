@@ -3,6 +3,16 @@ import type { ChatMessage, LLMConfig, RunDetail, RunSummary } from "./types";
 
 const u = () => getSidecarUrl();
 
+function sidecarConfig(config: LLMConfig) {
+  return {
+    base_url: config.baseUrl,
+    api_key: config.apiKey,
+    model: config.model,
+    temperature: config.temperature,
+    use_tools: config.useTools,
+  };
+}
+
 export async function checkHealth(): Promise<boolean> {
   try {
     const r = await fetch(`${u()}/health`, { method: "GET" });
@@ -35,7 +45,7 @@ export async function reviewRun(runId: string) {
   const r = await fetch(`${u()}/review`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ run_id: runId, config: cfg }),
+    body: JSON.stringify({ run_id: runId, config: sidecarConfig(cfg) }),
   });
   return r.json();
 }
@@ -62,7 +72,7 @@ export async function streamChat(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages,
-        config,
+        config: sidecarConfig(config),
         compute: computeBackend,
       }),
       signal,

@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "../stores/session";
 import type { ChatMessage } from "../lib/types";
-import { IconSend } from "@tabler/icons-react";
+import { IconPlayerStop, IconSend } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 interface Props {
   messages: ChatMessage[];
   onSend: (text: string) => void;
+  onStop: () => void;
   streaming: boolean;
   error: string | null;
 }
 
-export default function ChatPanel({ messages, onSend, streaming, error }: Props) {
+export default function ChatPanel({ messages, onSend, onStop, streaming, error }: Props) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -97,9 +98,15 @@ export default function ChatPanel({ messages, onSend, streaming, error }: Props)
           onKeyDown={handleKey}
           rows={1}
         />
-        <button className="btn btn-primary" onClick={submit} disabled={streaming || !input.trim()}>
-          <IconSend size={14} style={{ verticalAlign: "middle" }} />
-        </button>
+        {streaming ? (
+          <button className="btn" onClick={onStop} aria-label="Stop response" title="Stop response">
+            <IconPlayerStop size={14} />
+          </button>
+        ) : (
+          <button className="btn btn-primary" onClick={submit} disabled={!input.trim()} aria-label="Send message" title="Send message">
+            <IconSend size={14} style={{ verticalAlign: "middle" }} />
+          </button>
+        )}
       </div>
     </>
   );
