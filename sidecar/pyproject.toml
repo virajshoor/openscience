@@ -1,0 +1,36 @@
+[project]
+name = "openscience-sidecar"
+version = "0.1.0"
+description = "OpenScience Python sidecar: LLM client, tools, compute, reproducibility"
+requires-python = ">=3.10"
+license = "AGPL-3.0-only"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "openai>=1.50",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "paramiko>=3.4",
+    "biopython>=1.83",
+    "chembl_webresource_client>=0.10",
+    "requests>=2.32",
+    "sse-starlette>=2.1",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "ruff"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["sidecar", "sidecar.llm", "sidecar.tools", "sidecar.repro", "sidecar.compute"]

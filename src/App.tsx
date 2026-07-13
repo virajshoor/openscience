@@ -1,0 +1,240 @@
+import { useEffect, useState } from "react";
+import { IconSettings, IconRefresh, IconBrain, IconMicroscope, IconHistory } from "@tabler/icons-react";
+import { useSession, setSidecarUrl } from "./stores/session";
+import { checkHealth, fetchRuns, streamChat, loadPersistedConfig, persistConfig } from "./lib/api";
+import ChatPanel from "./components/ChatPanel";
+import ViewerPanel from "./components/ViewerPanel";
+import RunInspector from "./components/RunInspector";
+import RunHistory from "./components/RunHistory";
+import SettingsModal from "./components/SettingsModal";
+import type { ChatMessage } from "./lib/types";
+
+// Tauri IPC bridge — optional (only present when running inside the Tauri shell).
+// In a browser dev session, these are undefined and we fall back to port 7100.
+async function discoverSidecarPort(): Promise<number | null> {
+  try {
+    const w = window as unknown as { __TAURI__?: { core?: { invoke?: (cmd: string) => Promise<unknown> } } };
+    const invoke = w.__TAURI__?.core?.invoke;
+    if (!invoke) return null;
+    const port = await invoke("sidecar_port") as number;
+    return port || null;
+  } catch {
+    return null;
+  }
+}
+
+export default function App() {
+  const setSidecarOnline = useSession((s) => s.setSidecarOnline);
+  const sidecarOnline = useSession((s) => s.sidecarOnline);
+  const setRuns = useSession((s) => s.setRuns);
+  const runs = useSession((s) => s.runs);
+  const clear = useSession((s) => s.clear);
+  const messages = useSession((s) => s.messages);
+  const streaming = useSession((s) => s.streaming);
+  const setStreaming = useSession((s) => s.setStreaming);
+  const setError = useSession((s) => s.setError);
+  const error = useSession((s) => s.error);
+  const setViewer = useSession((s) => s.setViewer);
+  const pushMessage = useSession((s) => s.pushMessage);
+  const appendAssistant = useSession((s) => s.appendAssistant);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+
+  // Health check + run list
+  async function refresh() {
+    const ok = await checkHealth();
+    setSidecarOnline(ok);
+    if (ok) {
+      const rs = await fetchRuns();
+      setRuns(rs);
+    }
+  }
+
+  // Aggressive retry: check every 2s when offline, 10s when online
+  useEffect(() => {
+    (async () => {
+      const port = await discoverSidecarPort();
+      if (port && port !== 7100) {
+        setSidecarUrl(`http://127.0.0.1:${port}`);
+      }
+      // Load persisted config from sidecar (survives reinstalls)
+      const persisted = await loadPersistedConfig();
+      if (persisted) {
+        const c = persisted as Record<string, unknown>;
+        if (c.base_url) useSession.getState().setConfig({ baseUrl: c.base_url as string });
+        if (c.api_key) useSession.getState().setConfig({ apiKey: c.api_key as string });
+        if (c.model) useSession.getState().setConfig({ model: c.model as string });
+        if (c.temperature !== undefined) useSession.getState().setConfig({ temperature: c.temperature as number });
+        if (c.use_tools !== undefined) useSession.getState().setConfig({ useTools: c.use_tools as boolean });
+        if (c.compute) useSession.getState().setCompute(c.compute as string);
+      }
+      refresh();
+    })();
+    const id = setInterval(refresh, 2000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Persist config to sidecar whenever it changes
+  const config = useSession((s) => s.config);
+  const computeBackend = useSession((s) => s.computeBackend);
+  useEffect(() => {
+    persistConfig({
+      base_url: config.baseUrl,
+      api_key: config.apiKey,
+      model: config.model,
+      temperature: config.temperature,
+      use_tools: config.useTools,
+      compute: computeBackend,
+    });
+  }, [config, computeBackend]);
+
+  async function send(text: string) {
+    if (!text.trim() || streaming) return;
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: text,
+      ts: Date.now(),
+    };
+    pushMessage(userMsg);
+    const asstId = crypto.randomUUID();
+    pushMessage({ id: asstId, role: "assistant", content: "", ts: Date.now() });
+    setStreaming(true);
+    setError(null);
+
+    const history = [...useSession.getState().messages, userMsg]
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    // Timeout: if no tokens arrive in 30s, show error
+    let hasTokens = false;
+    const timeoutId = setTimeout(() => {
+      if (!hasTokens) {
+        setError("No response from LLM within 30s. Check your endpoint and API key in Settings.");
+        setStreaming(false);
+      }
+    }, 30000);
+
+    try {
+      await streamChat(history, {
+        onToken: (t) => {
+          hasTokens = true;
+          appendAssistant(asstId, t);
+        },
+        onToolCall: (c) => {
+          hasTokens = true;
+          pushMessage({
+            id: crypto.randomUUID(),
+            role: "tool",
+            content: `→ ${c.name}(${JSON.stringify(c.arguments)})`,
+            toolCalls: [c],
+            ts: Date.now(),
+          });
+        },
+        onToolResult: (id, name, result) => {
+          const summary =
+            typeof result === "object" && result && "summary" in (result as object)
+              ? (result as Record<string, unknown>).summary
+              : JSON.stringify(result);
+          pushMessage({
+            id: crypto.randomUUID(),
+            role: "tool",
+            content: `← ${name}: ${summary}`,
+            toolResult: result,
+            ts: Date.now(),
+          });
+        },
+        onViewer: (v) => setViewer(v ?? null),
+        onDone: () => {
+          refresh();
+        },
+        onError: (msg) => setError(msg),
+      });
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      clearTimeout(timeoutId);
+      setStreaming(false);
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className={`sidebar-brand-dot ${sidecarOnline ? "" : "offline"}`} />
+          OpenScience
+        </div>
+
+        <button className="new-run-btn" onClick={() => { clear(); setSelectedRunId(null); }}>
+          + New conversation
+        </button>
+
+        <div className="section-label" style={{ marginTop: 16 }}>
+          <IconHistory size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
+          Run history
+        </div>
+        <RunHistory
+          runs={runs}
+          selectedId={selectedRunId}
+          onSelect={setSelectedRunId}
+        />
+
+        <div style={{ flex: 1 }} />
+
+        <button className="btn" onClick={() => setSettingsOpen(true)} style={{ width: "100%" }}>
+          <IconSettings size={14} style={{ verticalAlign: "middle", marginRight: 6 }} />
+          Settings
+        </button>
+      </aside>
+
+      <main className="main-area">
+        <div className="topbar">
+          <div className="topbar-status">
+            <span className={`pill ${sidecarOnline ? "" : "badge-fail"}`}>
+              {sidecarOnline ? "sidecar: online" : "sidecar: offline"}
+            </span>
+            <span className="pill">
+              <IconBrain size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
+              {useSession.getState().config.model}
+            </span>
+            <span className="pill">
+              <IconMicroscope size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
+              {useSession.getState().computeBackend}
+            </span>
+          </div>
+          <div>
+            <button className="btn" onClick={refresh}>
+              <IconRefresh size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div className="workspace">
+          <div className="pane">
+            <div className="pane-header">Conversation</div>
+            <ChatPanel messages={messages} onSend={send} streaming={streaming} error={error} />
+          </div>
+          <div className="pane">
+            <div className="pane-header">
+              {selectedRunId ? "Run inspector" : "Viewer"}
+              {selectedRunId && (
+                <button className="btn" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => setSelectedRunId(null)}>
+                  back to viewer
+                </button>
+              )}
+            </div>
+            {selectedRunId ? (
+              <RunInspector runId={selectedRunId} />
+            ) : (
+              <ViewerPanel />
+            )}
+          </div>
+        </div>
+      </main>
+
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+    </div>
+  );
+}

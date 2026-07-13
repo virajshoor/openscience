@@ -1,0 +1,27 @@
+[package]
+name = "openscience"
+version = "0.1.0"
+description = "Open-source scientific AI workbench"
+license = "AGPL-3.0-only"
+edition = "2021"
+
+[lib]
+name = "openscience_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.1", features = [] }
+tauri-plugin-shell = "2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+which = "7"
+reqwest = { version = "0.12", features = ["blocking"], default-features = false }
+log = "0.4"
+env_logger = "0.11"
+dirs = "5"
+
+[features]
+default = []

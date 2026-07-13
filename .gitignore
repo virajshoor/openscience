@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+
+# Python
+sidecar/.venv/
+sidecar/__pycache__/
+sidecar/**/__pycache__/
+sidecar/*.egg-info/
+sidecar/.python-version
+.venv/
+__pycache__/
+*.egg-info/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# Runs
+runs/
+.openscience/
