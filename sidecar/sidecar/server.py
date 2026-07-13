@@ -34,7 +34,7 @@ SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 CONFIG_DIR = Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience")))
 CONFIG_FILE = CONFIG_DIR / "config.json"
-PERSISTED_CONFIG_KEYS = {"base_url", "model", "temperature", "use_tools", "compute"}
+PERSISTED_CONFIG_KEYS = {"base_url", "api_key", "model", "temperature", "use_tools", "compute"}
 
 
 def load_config() -> dict:
@@ -172,13 +172,13 @@ async def get_output(run_id: str, filename: str):
 
 @app.get("/config")
 async def get_config():
-    """Return non-secret persisted endpoint and model preferences."""
+    """Return persisted user config (endpoint, model, API key, etc.)."""
     return load_config()
 
 
 @app.post("/config")
 async def save_user_config(req: dict):
-    """Persist non-secret preferences to ~/.openscience/config.json."""
+    """Persist user config to ~/.openscience/config.json. Survives rebuilds."""
     save_config(req)
     return {"ok": True}
 

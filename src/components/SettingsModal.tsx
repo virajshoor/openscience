@@ -92,7 +92,7 @@ export default function SettingsModal({ onClose }: Props) {
             onChange={(e) => setConfig({ apiKey: e.target.value })}
             placeholder="sk-…"
           />
-          <div className="field-hint">Stored only in memory for this session. Not persisted to disk.</div>
+          <div className="field-hint">Stored locally in ~/.openscience/config.json. Never committed to the repository.</div>
         </div>
 
         <div className="field">

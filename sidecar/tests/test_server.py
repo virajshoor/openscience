@@ -46,7 +46,7 @@ def test_config_save_and_load(client):
     r2 = client.get("/config")
     data = r2.json()
     assert data["base_url"] == "http://x"
-    assert "api_key" not in data
+    assert data["api_key"] == "sk-x"
 
 
 def test_output_path_traversal_blocked(client):

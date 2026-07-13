@@ -31,7 +31,22 @@ html, body, #root {
   flex-direction: column;
   padding: 12px;
   gap: 12px;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar-top {
+  flex: 0 0 auto;
+}
+
+.sidebar-runs {
+  flex: 1 1 0;
   overflow-y: auto;
+  min-height: 0;
+}
+
+.sidebar-bottom {
+  flex: 0 0 auto;
 }
 
 .sidebar-brand {
@@ -486,22 +501,28 @@ html, body, #root {
   }
   .sidebar {
     flex-direction: row;
+    height: auto;
     padding: 8px;
     gap: 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
     border-right: none;
     border-bottom: 1px solid #1c2230;
   }
-  .sidebar > *:not(.sidebar-brand) {
+  .sidebar-top,
+  .sidebar-bottom {
     flex: 0 0 auto;
+  }
+  .sidebar-runs {
+    flex: 1 1 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    min-width: 0;
   }
   .sidebar-brand {
     padding: 0 8px;
   }
   .section-label,
   .new-run-btn,
-  .sidebar > button {
+  .sidebar > div > button {
     white-space: nowrap;
   }
   .workspace {

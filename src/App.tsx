@@ -99,6 +99,7 @@ export default function App() {
       if (persisted) {
         const c = persisted as Record<string, unknown>;
         if (c.base_url) useSession.getState().setConfig({ baseUrl: c.base_url as string });
+        if (c.api_key) useSession.getState().setConfig({ apiKey: c.api_key as string });
         if (c.model) useSession.getState().setConfig({ model: c.model as string });
         if (c.temperature !== undefined) useSession.getState().setConfig({ temperature: c.temperature as number });
         if (c.use_tools !== undefined) useSession.getState().setConfig({ useTools: c.use_tools as boolean });
@@ -115,6 +116,7 @@ export default function App() {
   useEffect(() => {
     persistConfig({
       base_url: config.baseUrl,
+      api_key: config.apiKey,
       model: config.model,
       temperature: config.temperature,
       use_tools: config.useTools,
@@ -196,26 +198,31 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="sidebar-brand">
-          <img className="sidebar-brand-logo" src={openScienceLogo} alt="OpenScience logo" />
-          <span className={`sidebar-brand-dot ${sidecarOnline ? "" : "offline"}`} />
-          OpenScience
+        <div className="sidebar-top">
+          <div className="sidebar-brand">
+            <img className="sidebar-brand-logo" src={openScienceLogo} alt="OpenScience logo" />
+            <span className={`sidebar-brand-dot ${sidecarOnline ? "" : "offline"}`} />
+            OpenScience
+          </div>
+
+          <button className="new-run-btn" onClick={newConversation}>+ New conversation</button>
+
+          <div className="section-label" style={{ marginTop: 16 }}>
+            <IconHistory size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
+            Run history
+          </div>
         </div>
 
-        <button className="new-run-btn" onClick={newConversation}>+ New conversation</button>
-
-        <div className="section-label" style={{ marginTop: 16 }}>
-          <IconHistory size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
-          Run history
+        <div className="sidebar-runs">
+          <RunHistory runs={runs} selectedId={selectedRunId} onSelect={loadRunIntoChat} />
         </div>
-        <RunHistory runs={runs} selectedId={selectedRunId} onSelect={loadRunIntoChat} />
 
-        <div style={{ flex: 1 }} />
-
-        <button className="btn" onClick={() => setSettingsOpen(true)} style={{ width: "100%" }}>
-          <IconSettings size={14} style={{ verticalAlign: "middle", marginRight: 6 }} />
-          Settings
-        </button>
+        <div className="sidebar-bottom">
+          <button className="btn" onClick={() => setSettingsOpen(true)} style={{ width: "100%" }}>
+            <IconSettings size={14} style={{ verticalAlign: "middle", marginRight: 6 }} />
+            Settings
+          </button>
+        </div>
       </aside>
 
       <main className="main-area">
