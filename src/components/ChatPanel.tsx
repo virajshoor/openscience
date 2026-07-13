@@ -59,7 +59,7 @@ export default function ChatPanel({ messages, onSend, streaming, error }: Props)
         {messages.map((m) => (
           <div key={m.id} className={`msg ${m.role}`}>
             <div className="role-tag">{m.role}</div>
-            {m.content || (m.role === "assistant" && streaming ? "…" : "")}
+            {!m.toolCalls?.length && (m.content || (m.role === "assistant" && streaming ? "…" : ""))}
             {m.toolCalls && m.toolCalls.length > 0 && (
               <div className="tool-block">
                 <div className="tool-block-name">tool call</div>

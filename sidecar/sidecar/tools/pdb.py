@@ -53,7 +53,7 @@ async def pdb_fetch(pdb_id: str, format: str = "pdb", recorder=None, run_id=None
 
 @tool(
     "pdb.search",
-    "Search RCSB PDB by text query. Returns up to 10 matching PDB IDs with titles.",
+    "Search RCSB PDB by text query. Returns up to 10 matching PDB IDs.",
     {
         "type": "object",
         "properties": {"query": {"type": "string", "description": "Free-text search, e.g. 'hemoglobin'"}},
@@ -62,16 +62,21 @@ async def pdb_fetch(pdb_id: str, format: str = "pdb", recorder=None, run_id=None
 )
 async def pdb_search(query: str) -> dict:
     body = {
-        "query": {"type": "group", "logical_operator": "and", "nodes": [
-            {"type": "terminal", "service": "text", "parameters": {"attribute": "struct.title", "operator": "contains", "value": query}
-        }]},
+        "query": {
+            "type": "terminal",
+            "service": "full_text",
+            "parameters": {"value": query},
+        },
         "return_type": "entry",
-        "request_options": {"results_content_type": ["experimental"], "paginate": {"start": 0, "rows": 10}},
+        "request_options": {"paginate": {"start": 0, "rows": 10}},
     }
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post("https://search.rcsb.org/rcsbsearch/v2/query", json=body)
     if r.status_code != 200:
-        return {"summary": f"PDB search for '{query}': no results or error."}
+        return {
+            "error": f"PDB search failed with HTTP {r.status_code}",
+            "summary": f"PDB search for '{query}' failed with HTTP {r.status_code}.",
+        }
     data = r.json()
     hits = data.get("result_set", [])
     ids = [h.get("identifier") for h in hits]

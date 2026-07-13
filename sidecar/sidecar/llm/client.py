@@ -160,6 +160,18 @@ class LLMClient:
                     }
                 )
                 recorder.append(run_id, "tool", {"tool": tool_name, "args": args, "result": result})
+
+                if isinstance(result, dict) and result.get("error"):
+                    message = f"I couldn't complete {tool_name}: {result['error']}."
+                    assistant_error = {"role": "assistant", "content": message}
+                    conv.append(assistant_error)
+                    recorder.append(run_id, "assistant", assistant_error)
+                    yield {"event": "token", "data": {"text": message}}
+                    recorder.finish(run_id)
+                    break
+            else:
+                continue
+            break
         else:
             yield {"event": "error", "data": {"message": "Max iterations reached"}}
             recorder.finish(run_id)

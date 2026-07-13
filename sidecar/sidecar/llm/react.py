@@ -76,6 +76,8 @@ Action: ```json
 
 After the tool result is returned, you may continue reasoning or give a final answer.
 When you have the final answer and do not need any tool, respond normally without "Action:".
+Never retry a tool solely because it returned no results or an error. Summarize that
+outcome and, if useful, ask the user for a more specific query.
 
 Available tools:
 {tool_descriptions}
