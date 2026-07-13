@@ -6,10 +6,6 @@ interface Props {
   label: string;
 }
 
-/**
- * 3D protein structure viewer using NGL.
- * Loads .pdb/.cif files from the sidecar's run outputs directory.
- */
 export default function ProteinViewer({ src, label }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<any>(null);
@@ -25,8 +21,8 @@ export default function ProteinViewer({ src, label }: Props) {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(url, { method: "GET" });
-        if (!response.ok) throw new Error(`artifact request failed with HTTP ${response.status}`);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const module = await import("ngl");
         const NGL = module.default ?? module;
         if (cancelled || !containerRef.current) return;

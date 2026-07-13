@@ -56,6 +56,9 @@ def save_config(cfg: dict) -> None:
     config_dir = Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience")))
     config_dir.mkdir(parents=True, exist_ok=True)
     config = {key: value for key, value in cfg.items() if key in PERSISTED_CONFIG_KEYS}
+    existing = load_config()
+    if not str(config.get("api_key", "")).strip() and existing.get("api_key"):
+        config["api_key"] = existing["api_key"]
     (config_dir / "config.json").write_text(json.dumps(config, indent=2))
 
 

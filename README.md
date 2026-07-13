@@ -10,6 +10,8 @@ Ollama, vLLM, Together, Groq, OpenRouter, Azure OpenAI, local Llama, etc.
 
 Licensed under **AGPL-3.0**.
 
+![OpenScience UI with 3D protein viewer](preview.png)
+
 ---
 
 ## Architecture (v0.1)

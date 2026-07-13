@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchRun, reviewRun } from "../lib/api";
+import { fetchRun, reviewRun, exportRun } from "../lib/api";
 import type { RunDetail } from "../lib/types";
 
 interface Props {
@@ -13,9 +13,14 @@ export default function RunInspector({ runId }: Props) {
 
   async function load() {
     setLoading(true);
-    const r = await fetchRun(runId);
-    setRun(r);
-    setLoading(false);
+    try {
+      const r = await fetchRun(runId);
+      setRun(r);
+    } catch (e) {
+      setRun(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, [runId]);
@@ -30,7 +35,15 @@ export default function RunInspector({ runId }: Props) {
     }
   }
 
-  if (loading) return <div className="inspector-empty">Loading run…</div>;
+  async function doExport() {
+    try {
+      await exportRun(runId);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  if (loading) return <div className="inspector-empty">Loading run...</div>;
   if (!run) return <div className="inspector-empty">Run not found.</div>;
 
   const verdict = (run.review as any)?.verdict;
@@ -57,10 +70,10 @@ export default function RunInspector({ runId }: Props) {
       <div className="inspector-section">
         <h4>Automated review</h4>
         {!run.review && (
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span style={{ fontSize: 12, color: "#6b7280" }}>Not yet reviewed.</span>
             <button className="btn btn-primary" onClick={doReview} disabled={reviewing}>
-              {reviewing ? "Reviewing…" : "Run reviewer"}
+              {reviewing ? "Reviewing..." : "Run reviewer"}
             </button>
           </div>
         )}
@@ -82,6 +95,10 @@ export default function RunInspector({ runId }: Props) {
       <div className="inspector-section">
         <h4>Conversation</h4>
         <pre style={{ maxHeight: 400 }}>{JSON.stringify(run.conversation, null, 2)}</pre>
+      </div>
+
+      <div className="inspector-section">
+        <button className="btn" onClick={doExport}>Export run as JSON</button>
       </div>
     </div>
   );

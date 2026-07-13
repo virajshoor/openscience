@@ -6,11 +6,6 @@ interface Props {
   label: string;
 }
 
-/**
- * Genome / sequence track viewer (v0.1 lightweight).
- * Parses FASTA and renders a nucleotide track + GC content bar chart.
- * v0.2 will swap in full igv.js for real genome browser tracks.
- */
 export default function GenomeViewer({ src, label }: Props) {
   const [seq, setSeq] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +21,6 @@ export default function GenomeViewer({ src, label }: Props) {
         const r = await fetch(url);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const text = await r.text();
-        // Parse FASTA: strip header lines starting with >
         const body = text.split("\n").filter((l) => !l.startsWith(">") && l.trim()).join("");
         if (cancelled) return;
         setSeq(body.toUpperCase());
@@ -40,25 +34,34 @@ export default function GenomeViewer({ src, label }: Props) {
     return () => { cancelled = true; };
   }, [src]);
 
-  if (loading) return <div className="viewer-empty">Loading…</div>;
+  if (loading) return <div className="viewer-empty">Loading...</div>;
   if (error) return <div className="viewer-empty">Error: {error}</div>;
   if (!seq) return <div className="viewer-empty">No sequence</div>;
-
-  const windowSize = 40;
-  const windows: { pos: number; gc: number }[] = [];
-  for (let i = 0; i < seq.length; i += windowSize) {
-    const w = seq.slice(i, i + windowSize);
-    const gc = ((w.match(/[GC]/g) || []).length / w.length) * 100;
-    windows.push({ pos: i, gc });
-  }
 
   const nucleotideColors: Record<string, string> = {
     A: "#2fdd66", T: "#e76e76", G: "#f0b669", C: "#58d4c4",
   };
 
-  // Show first 800 bp as colored nucleotide blocks
   const visibleSeq = seq.slice(0, 800);
-  const charWidth = Math.min(8, Math.max(3, 800 / visibleSeq.length));
+  const charWidth = Math.min(8, Math.max(3, 800 / Math.max(visibleSeq.length, 1)));
+
+  const windowSize = 40;
+  const MAX_GC_BARS = 200;
+  const totalWindows = Math.ceil(seq.length / windowSize);
+  const step = Math.max(1, Math.ceil(totalWindows / MAX_GC_BARS));
+  const windows: { pos: number; gc: number }[] = [];
+  for (let i = 0; i < totalWindows; i += step) {
+    let gcCount = 0;
+    let total = 0;
+    for (let j = i; j < Math.min(i + step, totalWindows); j++) {
+      const start = j * windowSize;
+      const end = Math.min(start + windowSize, seq.length);
+      const w = seq.slice(start, end);
+      gcCount += (w.match(/[GC]/g) || []).length;
+      total += w.length;
+    }
+    windows.push({ pos: i * windowSize, gc: total > 0 ? (gcCount / total) * 100 : 0 });
+  }
 
   return (
     <div style={{ padding: 14, height: "100%", overflow: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -80,14 +83,14 @@ export default function GenomeViewer({ src, label }: Props) {
         </div>
         {seq.length > 800 && (
           <div style={{ fontSize: 11, color: "#4b5563", marginTop: 4 }}>
-            Showing first 800 bp of {seq.length.toLocaleString()}. v0.2 will add full igv.js browser.
+            Showing first 800 bp of {seq.length.toLocaleString()}.
           </div>
         )}
       </div>
 
       <div>
         <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.08 }}>
-          GC content (per {windowSize} bp window)
+          GC content (per {windowSize} bp window{step > 1 ? `, sampled every ${step} windows` : ""})
         </div>
         <svg width="100%" height="80" style={{ background: "#0f1620", border: "1px solid #1c2230", borderRadius: 6 }}>
           {windows.map((w, i) => {

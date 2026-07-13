@@ -5,10 +5,6 @@ interface Props {
   label: string;
 }
 
-/**
- * Chemistry viewer using RDKit-JS (loaded from CDN).
- * Renders a 2D molecule from a SMILES string.
- */
 declare global {
   interface Window {
     initRDKitModule?: (wasmPath: string) => Promise<any>;
@@ -36,7 +32,7 @@ async function loadRDKit(): Promise<any> {
         reject(e);
       }
     };
-    s.onerror = () => reject(new Error("Failed to load RDKit from CDN"));
+    s.onerror = () => reject(new Error("Failed to load RDKit"));
     document.head.appendChild(s);
   });
   return rdkitPromise;
@@ -62,8 +58,16 @@ export default function ChemViewer({ smiles, label }: Props) {
           return;
         }
         const svg = mol.get_svg(500, 400);
-        containerRef.current.innerHTML = svg;
         mol.delete();
+        if (cancelled || !containerRef.current) return;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svg, "image/svg+xml");
+        const svgEl = doc.documentElement;
+        svgEl.querySelectorAll("script").forEach((n) => n.remove());
+        svgEl.removeAttribute("onload");
+        svgEl.removeAttribute("onclick");
+        containerRef.current.innerHTML = "";
+        containerRef.current.appendChild(svgEl);
         setStatus("ok");
       } catch (e) {
         setStatus("error");
@@ -80,10 +84,10 @@ export default function ChemViewer({ smiles, label }: Props) {
         {label} <span style={{ color: "#4b5563" }}>· RDKit 2D</span>
       </div>
       <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
-        {status === "loading" && <div className="viewer-empty">Loading RDKit…</div>}
+        {status === "loading" && <div className="viewer-empty">Loading RDKit...</div>}
         {status === "error" && (
           <div className="viewer-empty">
-            <div className="viewer-empty-icon">⚠</div>
+            <div className="viewer-empty-icon">!</div>
             <div>Failed to render: {errMsg}</div>
             <div style={{ color: "#4b5563", fontSize: 12, fontFamily: "monospace" }}>{smiles}</div>
           </div>

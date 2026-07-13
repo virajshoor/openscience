@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IconSettings, IconRefresh, IconBrain, IconMicroscope, IconHistory } from "@tabler/icons-react";
 import openScienceLogo from "./assets/openscience-logo.svg";
-import { useSession, setSidecarUrl } from "./stores/session";
+import { getSidecarUrl, useSession, setSidecarUrl } from "./stores/session";
 import { checkHealth, fetchRuns, fetchRun, streamChat, loadPersistedConfig, persistConfig } from "./lib/api";
 import ChatPanel from "./components/ChatPanel";
 import ViewerPanel from "./components/ViewerPanel";
@@ -103,6 +103,27 @@ export default function App() {
   }
 
   useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval>;
+    let online = false;
+
+    async function poll() {
+      const ok = await checkHealth();
+      setSidecarOnline(ok);
+      if (ok) {
+        if (!online) {
+          const rs = await fetchRuns();
+          setRuns(rs);
+        }
+        online = true;
+        clearInterval(intervalId);
+        intervalId = setInterval(poll, 30000);
+      } else {
+        online = false;
+        clearInterval(intervalId);
+        intervalId = setInterval(poll, 2000);
+      }
+    }
+
     (async () => {
       const port = await discoverSidecarPort();
       if (port && port !== 7100) {
@@ -118,10 +139,9 @@ export default function App() {
         if (c.use_tools !== undefined) useSession.getState().setConfig({ useTools: c.use_tools as boolean });
         if (c.compute) useSession.getState().setCompute(c.compute as string);
       }
-      refresh();
+      poll();
     })();
-    const id = setInterval(refresh, 10000);
-    return () => clearInterval(id);
+    return () => clearInterval(intervalId);
   }, []);
 
   const config = useSession((s) => s.config);
@@ -186,7 +206,7 @@ ${recentMessages}
 
 Output only the synthesized context, no preamble.`;
 
-        const r = await fetch(`${getSidecarUrlSafe()}/chat`, {
+        const r = await fetch(`${getSidecarUrl()}/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -234,10 +254,6 @@ Output only the synthesized context, no preamble.`;
         setCompounding(false);
       }
     }
-  }
-
-  function getSidecarUrlSafe(): string {
-    return (window as unknown as { __openscience_sidecar_url?: string }).__openscience_sidecar_url || "http://127.0.0.1:7100";
   }
 
   async function send(text: string) {

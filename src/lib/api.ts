@@ -26,17 +26,24 @@ export async function checkHealth(): Promise<boolean> {
 
 export async function fetchTools() {
   const r = await fetch(`${u()}/tools`);
+  if (!r.ok) return { tools: [] };
   return r.json();
 }
 
 export async function fetchRuns(): Promise<RunSummary[]> {
-  const r = await fetch(`${u()}/runs`);
-  const data = await r.json();
-  return data.runs ?? [];
+  try {
+    const r = await fetch(`${u()}/runs`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return data.runs ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchRun(runId: string): Promise<RunDetail> {
   const r = await fetch(`${u()}/runs/${runId}`);
+  if (!r.ok) throw new Error(`Run ${runId}: HTTP ${r.status}`);
   return r.json();
 }
 
@@ -47,7 +54,21 @@ export async function reviewRun(runId: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ run_id: runId, config: sidecarConfig(cfg) }),
   });
+  if (!r.ok) return { error: `HTTP ${r.status}` };
   return r.json();
+}
+
+export async function exportRun(runId: string): Promise<void> {
+  const r = await fetch(`${u()}/runs/${runId}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const data = await r.json();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `openscience-run-${runId}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 interface StreamCallbacks {
@@ -78,6 +99,7 @@ export async function streamChat(
       signal,
     });
   } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") return;
     cb.onError(`Cannot reach sidecar: ${String(e)}`);
     return;
   }
@@ -96,6 +118,7 @@ export async function streamChat(
     try {
       result = await reader.read();
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       cb.onError(`Stream read error: ${String(e)}`);
       return;
     }
@@ -103,7 +126,6 @@ export async function streamChat(
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
 
-    // SSE events: data: <json>\n\n
     const parts = buffer.split("\n\n");
     buffer = parts.pop() || "";
 
@@ -139,8 +161,13 @@ export async function configureSSH(host: string, user: string, port: number, key
 }
 
 export async function listCompute() {
-  const r = await fetch(`${u()}/compute`);
-  return r.json();
+  try {
+    const r = await fetch(`${u()}/compute`);
+    if (!r.ok) return { backends: [{ name: "local", type: "local" }] };
+    return r.json();
+  } catch {
+    return { backends: [{ name: "local", type: "local" }] };
+  }
 }
 
 export async function loadPersistedConfig(): Promise<Record<string, unknown> | null> {
@@ -165,8 +192,4 @@ export async function persistConfig(cfg: Record<string, unknown>): Promise<void>
   } catch {
     // best-effort
   }
-}
-
-export function buildConfig(): LLMConfig {
-  return useSession.getState().config;
 }
