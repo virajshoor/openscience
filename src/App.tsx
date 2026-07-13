@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconSettings, IconRefresh, IconBrain, IconMicroscope, IconHistory } from "@tabler/icons-react";
 import openScienceLogo from "./assets/openscience-logo.svg";
 import { useSession, setSidecarUrl } from "./stores/session";
-import { checkHealth, fetchRuns, streamChat, loadPersistedConfig, persistConfig } from "./lib/api";
+import { checkHealth, fetchRuns, fetchRun, streamChat, loadPersistedConfig, persistConfig } from "./lib/api";
 import ChatPanel from "./components/ChatPanel";
 import ViewerPanel from "./components/ViewerPanel";
 import RunInspector from "./components/RunInspector";
@@ -10,18 +10,55 @@ import RunHistory from "./components/RunHistory";
 import SettingsModal from "./components/SettingsModal";
 import type { ChatMessage } from "./lib/types";
 
-// Tauri IPC bridge — optional (only present when running inside the Tauri shell).
-// In a browser dev session, these are undefined and we fall back to port 7100.
 async function discoverSidecarPort(): Promise<number | null> {
   try {
     const w = window as unknown as { __TAURI__?: { core?: { invoke?: (cmd: string) => Promise<unknown> } } };
     const invoke = w.__TAURI__?.core?.invoke;
     if (!invoke) return null;
-    const port = await invoke("sidecar_port") as number;
+    const port = (await invoke("sidecar_port")) as number;
     return port || null;
   } catch {
     return null;
   }
+}
+
+function conversationToMessages(run: { conversation?: Array<Record<string, unknown>> }): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  for (const entry of run.conversation ?? []) {
+    const role = entry["role"] as ChatMessage["role"];
+    const payload = entry["payload"] as Record<string, unknown> | undefined;
+    if (!payload) continue;
+    if (role === "assistant") {
+      const content = (payload["content"] as string) || "";
+      const toolCalls = (payload["tool_calls"] as Array<{ id: string; function: { name: string; arguments: string } }>) || [];
+      if (content || toolCalls.length) {
+        out.push({
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content,
+          ts: Date.now(),
+          ...(toolCalls.length
+            ? {
+                toolCalls: toolCalls.map((tc) => ({
+                  id: tc.id,
+                  name: tc.function.name,
+                  arguments: JSON.parse(tc.function.arguments || "{}"),
+                })),
+              }
+            : {}),
+        });
+      }
+    } else if (role === "user") {
+      const content = (payload["content"] as string) || "";
+      if (content) out.push({ id: crypto.randomUUID(), role: "user", content, ts: Date.now() });
+    } else if (role === "tool") {
+      const tool = payload["tool"] as string;
+      const result = payload["result"] as Record<string, unknown>;
+      const summary = result?.["summary"] as string;
+      out.push({ id: crypto.randomUUID(), role: "tool", content: `${tool}: ${summary || ""}`, ts: Date.now() });
+    }
+  }
+  return out;
 }
 
 export default function App() {
@@ -40,8 +77,9 @@ export default function App() {
   const appendAssistant = useSession((s) => s.appendAssistant);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const viewingRun = useRef(false);
 
-  // Health check + run list
   async function refresh() {
     const ok = await checkHealth();
     setSidecarOnline(ok);
@@ -51,19 +89,16 @@ export default function App() {
     }
   }
 
-  // Aggressive retry: check every 2s when offline, 10s when online
   useEffect(() => {
     (async () => {
       const port = await discoverSidecarPort();
       if (port && port !== 7100) {
         setSidecarUrl(`http://127.0.0.1:${port}`);
       }
-      // Load persisted config from sidecar (survives reinstalls)
       const persisted = await loadPersistedConfig();
       if (persisted) {
         const c = persisted as Record<string, unknown>;
         if (c.base_url) useSession.getState().setConfig({ baseUrl: c.base_url as string });
-        if (c.api_key) useSession.getState().setConfig({ apiKey: c.api_key as string });
         if (c.model) useSession.getState().setConfig({ model: c.model as string });
         if (c.temperature !== undefined) useSession.getState().setConfig({ temperature: c.temperature as number });
         if (c.use_tools !== undefined) useSession.getState().setConfig({ useTools: c.use_tools as boolean });
@@ -71,17 +106,15 @@ export default function App() {
       }
       refresh();
     })();
-    const id = setInterval(refresh, 2000);
+    const id = setInterval(refresh, 10000);
     return () => clearInterval(id);
   }, []);
 
-  // Persist config to sidecar whenever it changes
   const config = useSession((s) => s.config);
   const computeBackend = useSession((s) => s.computeBackend);
   useEffect(() => {
     persistConfig({
       base_url: config.baseUrl,
-      api_key: config.apiKey,
       model: config.model,
       temperature: config.temperature,
       use_tools: config.useTools,
@@ -89,74 +122,75 @@ export default function App() {
     });
   }, [config, computeBackend]);
 
+  async function loadRunIntoChat(runId: string) {
+    viewingRun.current = true;
+    setSelectedRunId(runId);
+    clear();
+    const run = await fetchRun(runId);
+    const restored = conversationToMessages(run);
+    for (const m of restored) pushMessage(m);
+  }
+
+  function newConversation() {
+    clear();
+    setSelectedRunId(null);
+    viewingRun.current = false;
+  }
+
   async function send(text: string) {
     if (!text.trim() || streaming) return;
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: text,
-      ts: Date.now(),
-    };
+    viewingRun.current = false;
+
+    const history = messages
+      .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+      .map((m) => ({ role: m.role, content: m.content }));
+    history.push({ role: "user", content: text });
+
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: text, ts: Date.now() };
     pushMessage(userMsg);
     const asstId = crypto.randomUUID();
     pushMessage({ id: asstId, role: "assistant", content: "", ts: Date.now() });
     setStreaming(true);
     setError(null);
 
-    const history = [...useSession.getState().messages, userMsg]
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role, content: m.content }));
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-    // Timeout: if no tokens arrive in 30s, show error
     let hasTokens = false;
     const timeoutId = setTimeout(() => {
       if (!hasTokens) {
         setError("No response from LLM within 30s. Check your endpoint and API key in Settings.");
+        controller.abort();
         setStreaming(false);
       }
     }, 30000);
 
     try {
       await streamChat(history, {
-        onToken: (t) => {
-          hasTokens = true;
-          appendAssistant(asstId, t);
-        },
+        onToken: (t) => { hasTokens = true; appendAssistant(asstId, t); },
         onToolCall: (c) => {
           hasTokens = true;
-          pushMessage({
-            id: crypto.randomUUID(),
-            role: "tool",
-            content: `→ ${c.name}(${JSON.stringify(c.arguments)})`,
-            toolCalls: [c],
-            ts: Date.now(),
-          });
+          pushMessage({ id: crypto.randomUUID(), role: "tool", content: `${c.name}(${JSON.stringify(c.arguments)})`, toolCalls: [c], ts: Date.now() });
         },
         onToolResult: (id, name, result) => {
-          const summary =
-            typeof result === "object" && result && "summary" in (result as object)
-              ? (result as Record<string, unknown>).summary
-              : JSON.stringify(result);
-          pushMessage({
-            id: crypto.randomUUID(),
-            role: "tool",
-            content: `← ${name}: ${summary}`,
-            toolResult: result,
-            ts: Date.now(),
-          });
+          const summary = typeof result === "object" && result && "summary" in (result as object) ? (result as Record<string, unknown>).summary : JSON.stringify(result);
+          pushMessage({ id: crypto.randomUUID(), role: "tool", content: `${name}: ${summary}`, toolResult: result, ts: Date.now() });
         },
         onViewer: (v) => setViewer(v ?? null),
-        onDone: () => {
-          refresh();
-        },
+        onDone: () => { refresh(); },
         onError: (msg) => setError(msg),
-      });
+      }, controller.signal);
     } catch (e) {
-      setError(String(e));
+      if (!(e instanceof DOMException && e.name === "AbortError")) setError(String(e));
     } finally {
       clearTimeout(timeoutId);
+      abortRef.current = null;
       setStreaming(false);
     }
+  }
+
+  function stop() {
+    abortRef.current?.abort();
   }
 
   return (
@@ -168,19 +202,13 @@ export default function App() {
           OpenScience
         </div>
 
-        <button className="new-run-btn" onClick={() => { clear(); setSelectedRunId(null); }}>
-          + New conversation
-        </button>
+        <button className="new-run-btn" onClick={newConversation}>+ New conversation</button>
 
         <div className="section-label" style={{ marginTop: 16 }}>
           <IconHistory size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
           Run history
         </div>
-        <RunHistory
-          runs={runs}
-          selectedId={selectedRunId}
-          onSelect={setSelectedRunId}
-        />
+        <RunHistory runs={runs} selectedId={selectedRunId} onSelect={loadRunIntoChat} />
 
         <div style={{ flex: 1 }} />
 
@@ -192,17 +220,17 @@ export default function App() {
 
       <main className="main-area">
         <div className="topbar">
-          <div className="topbar-status">
+          <div className="topbar-status" aria-live="polite">
             <span className={`pill ${sidecarOnline ? "" : "badge-fail"}`}>
               {sidecarOnline ? "sidecar: online" : "sidecar: offline"}
             </span>
             <span className="pill">
               <IconBrain size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
-              {useSession.getState().config.model}
+              {config.model}
             </span>
             <span className="pill">
               <IconMicroscope size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
-              {useSession.getState().computeBackend}
+              {computeBackend}
             </span>
           </div>
           <div>
@@ -227,11 +255,7 @@ export default function App() {
                 </button>
               )}
             </div>
-            {selectedRunId ? (
-              <RunInspector runId={selectedRunId} />
-            ) : (
-              <ViewerPanel />
-            )}
+            {selectedRunId ? <RunInspector runId={selectedRunId} /> : <ViewerPanel />}
           </div>
         </div>
       </main>

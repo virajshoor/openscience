@@ -24,11 +24,13 @@ export default function RunHistory({ runs, selectedId, onSelect }: Props) {
     );
   }
   return (
-    <div>
+    <div role="listbox" aria-label="Run history">
       {runs.map((r) => (
-        <div
+        <button
           key={r.run_id}
           className="run-item"
+          role="option"
+          aria-selected={r.run_id === selectedId}
           onClick={() => onSelect(r.run_id)}
           style={r.run_id === selectedId ? { borderColor: "#2fdd66" } : {}}
         >
@@ -44,7 +46,7 @@ export default function RunHistory({ runs, selectedId, onSelect }: Props) {
               </span>
             )}
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );

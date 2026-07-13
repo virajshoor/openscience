@@ -477,3 +477,75 @@ html, body, #root {
 }
 
 .new-run-btn:hover { background: #1f2a3a; }
+
+/* Responsive */
+@media (max-width: 1000px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .sidebar {
+    flex-direction: row;
+    padding: 8px;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid #1c2230;
+  }
+  .sidebar > *:not(.sidebar-brand) {
+    flex: 0 0 auto;
+  }
+  .sidebar-brand {
+    padding: 0 8px;
+  }
+  .section-label,
+  .new-run-btn,
+  .sidebar > button {
+    white-space: nowrap;
+  }
+  .workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .workspace {
+    grid-template-rows: 1fr;
+  }
+  .pane:nth-child(2) {
+    display: none;
+  }
+  .sidebar {
+    padding: 6px;
+  }
+}
+
+/* Settings modal accessibility */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 5vh;
+  z-index: 100;
+}
+
+.run-item[role="option"] {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}

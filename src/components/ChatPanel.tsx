@@ -18,10 +18,22 @@ export default function ChatPanel({ messages, onSend, onStop, streaming, error }
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const stickToBottom = useRef(true);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    const el = scrollRef.current;
+    if (!el) return;
+    if (stickToBottom.current) {
+      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollTo({ top: el.scrollHeight, behavior: prefersReduced ? "auto" : "smooth" });
+    }
   }, [messages]);
+
+  function onScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  }
 
   function submit() {
     if (!input.trim() || streaming) return;
@@ -69,7 +81,7 @@ export default function ChatPanel({ messages, onSend, onStop, streaming, error }
 
   return (
     <>
-      <div className="chat-list" ref={scrollRef} style={{ flex: 1, overflowY: "auto" }}>
+      <div className="chat-list" ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: "auto" }}>
         {messages.length === 0 && (
           <div className="viewer-empty">
             <div className="viewer-empty-icon">🧬</div>
