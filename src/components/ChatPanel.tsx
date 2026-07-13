@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "../stores/session";
 import type { ChatMessage } from "../lib/types";
 import { IconSend } from "@tabler/icons-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Props {
   messages: ChatMessage[];
@@ -59,7 +61,15 @@ export default function ChatPanel({ messages, onSend, streaming, error }: Props)
         {messages.map((m) => (
           <div key={m.id} className={`msg ${m.role}`}>
             <div className="role-tag">{m.role}</div>
-            {!m.toolCalls?.length && (m.content || (m.role === "assistant" && streaming ? "…" : ""))}
+            {!m.toolCalls?.length && (
+              m.role === "assistant" ? (
+                m.content ? (
+                  <div className="message-markdown">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                  </div>
+                ) : (streaming ? "…" : "")
+              ) : m.content
+            )}
             {m.toolCalls && m.toolCalls.length > 0 && (
               <div className="tool-block">
                 <div className="tool-block-name">tool call</div>

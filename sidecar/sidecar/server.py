@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from .compute.ssh import SSHBackend
 
 # Globals (set in lifespan, read by routes)
 state: dict = {}
+SAFE_RUN_ID = re.compile(r"^[a-f0-9]{12}$")
+SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 CONFIG_DIR = Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience")))
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -147,10 +150,19 @@ async def configure_ssh(req: dict):
 @app.get("/runs/{run_id}/outputs/{filename}")
 async def get_output(run_id: str, filename: str):
     recorder: Recorder = state["recorder"]
-    run_dir = recorder.runs_dir / run_id / "outputs" / filename
-    if not run_dir.exists() or not run_dir.is_file():
+    if not SAFE_RUN_ID.fullmatch(run_id) or not SAFE_FILENAME.fullmatch(filename):
         raise HTTPException(status_code=404, detail="output not found")
-    return FileResponse(run_dir)
+
+    outputs_dir = recorder.runs_dir / run_id / "outputs"
+    output = outputs_dir / filename
+    if not output.is_file():
+        # Runs written before content-addressed names were exposed in viewer events
+        # referenced the original filename. Resolve that one legacy name safely.
+        matches = [p for p in outputs_dir.glob(f"*_{filename}") if p.is_file()]
+        output = matches[0] if len(matches) == 1 else output
+    if not output.is_file():
+        raise HTTPException(status_code=404, detail="output not found")
+    return FileResponse(output)
 
 
 @app.get("/config")

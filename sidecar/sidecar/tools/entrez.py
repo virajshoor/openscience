@@ -62,9 +62,9 @@ async def entrez_fetch(db: str, id: str, rettype: str = "fasta", recorder=None, 
     text = r.text
     # Save to outputs
     filename = f"entrez_{db}_{id}.{rettype}"
-    path = recorder.write_output(run_id, filename, text.encode())
-    summary = f"Fetched Entrez {db}/{id} ({rettype}): {len(text)} bytes saved to {filename}."
+    output_name = recorder.write_output(run_id, filename, text.encode())
+    summary = f"Fetched Entrez {db}/{id} ({rettype}): {len(text)} bytes saved to {output_name}."
     return {
         "summary": summary,
-        "data": {"db": db, "id": id, "rettype": rettype, "file": filename, "size": len(text)},
+        "data": {"db": db, "id": id, "rettype": rettype, "file": output_name, "size": len(text)},
     }

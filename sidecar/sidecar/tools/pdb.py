@@ -37,7 +37,7 @@ async def pdb_fetch(pdb_id: str, format: str = "pdb", recorder=None, run_id=None
         return {"error": f"PDB file {pdb_id}: HTTP {file_r.status_code}"}
     # Write to run outputs
     filename = f"{pdb_id}.{ext}"
-    path = recorder.write_output(run_id, filename, file_r.content)
+    output_name = recorder.write_output(run_id, filename, file_r.content)
     return {
         "summary": f"Fetched PDB {pdb_id}: {meta.get('struct', {}).get('title', 'unknown')}. Resolution: {meta.get('rcsb_entry_info', {}).get('resolution_combined', [None])[0]} Å. File saved and rendered in 3D viewer.",
         "data": {
@@ -45,9 +45,9 @@ async def pdb_fetch(pdb_id: str, format: str = "pdb", recorder=None, run_id=None
             "title": meta.get("struct", {}).get("title"),
             "resolution": meta.get("rcsb_entry_info", {}).get("resolution_combined"),
             "method": meta.get("rcsb_entry_info", {}).get("experimental_methods"),
-            "file": filename,
+            "file": output_name,
         },
-        "viewer": {"type": "protein", "src": f"runs/{run_id}/outputs/{filename}", "label": f"PDB {pdb_id}"},
+        "viewer": {"type": "protein", "src": f"runs/{run_id}/outputs/{output_name}", "label": f"PDB {pdb_id}"},
     }
 
 

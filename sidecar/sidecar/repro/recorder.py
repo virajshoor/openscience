@@ -76,9 +76,9 @@ class Recorder:
         run_dir.mkdir(parents=True, exist_ok=True)
         # Prepend hash to detect tampering
         digest = hashlib.sha256(data).hexdigest()[:8]
-        name = f"{digest}_{filename}"
+        name = f"{digest}_{Path(filename).name}"
         (run_dir / name).write_bytes(data)
-        return str(run_dir / name)
+        return name
 
     def write_review(self, run_id: str, review: dict) -> None:
         run_dir = self.runs_dir / run_id
