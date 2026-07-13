@@ -33,14 +33,19 @@ SAFE_RUN_ID = re.compile(r"^[a-f0-9]{12}$")
 SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 CONFIG_DIR = Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience")))
-CONFIG_FILE = CONFIG_DIR / "config.json"
 PERSISTED_CONFIG_KEYS = {"base_url", "api_key", "model", "temperature", "use_tools", "compute"}
 
 
+def _config_file() -> Path:
+    config_dir = Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience")))
+    return config_dir / "config.json"
+
+
 def load_config() -> dict:
-    if CONFIG_FILE.exists():
+    f = _config_file()
+    if f.exists():
         try:
-            config = json.loads(CONFIG_FILE.read_text())
+            config = json.loads(f.read_text())
             return {key: value for key, value in config.items() if key in PERSISTED_CONFIG_KEYS}
         except json.JSONDecodeError:
             pass
@@ -48,9 +53,10 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    config_dir = Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience")))
+    config_dir.mkdir(parents=True, exist_ok=True)
     config = {key: value for key, value in cfg.items() if key in PERSISTED_CONFIG_KEYS}
-    CONFIG_FILE.write_text(json.dumps(config, indent=2))
+    (config_dir / "config.json").write_text(json.dumps(config, indent=2))
 
 
 @asynccontextmanager
@@ -186,6 +192,7 @@ async def save_user_config(req: dict):
 @app.delete("/config")
 async def clear_config():
     """Clear persisted config."""
-    if CONFIG_FILE.exists():
-        CONFIG_FILE.unlink()
+    f = _config_file()
+    if f.exists():
+        f.unlink()
     return {"ok": True}

@@ -44,7 +44,7 @@ export default function SettingsModal({ onClose }: Props) {
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   async function saveSSH() {
     setSshMsg(null);

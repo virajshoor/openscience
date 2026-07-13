@@ -16,7 +16,7 @@ def client(tmp_path, monkeypatch):
     state["backends"] = {}
     state["ssh"] = None
     state["llm"] = None
-    from sidecar.tools import uniprot, pdb, entrez, chembl  # noqa
+    from sidecar.tools import uniprot, pdb, entrez, chembl  # noqa: F401
     with TestClient(app) as c:
         yield c
 
