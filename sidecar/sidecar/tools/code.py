@@ -50,7 +50,7 @@ def _interpreter(language: str, backend_name: str) -> str | None:
     return _remote_python()
 
 
-def _figure_viewers(run_id: str, fig_dir: Path, recorder) -> list[dict]:
+def _figure_viewers(run_id: str, fig_dir: Path, recorder, provenance: dict) -> list[dict]:
     """Collect figure files from fig_dir, persist them, and build viewer dicts."""
     viewers: list[dict] = []
     if not fig_dir.is_dir():
@@ -64,7 +64,7 @@ def _figure_viewers(run_id: str, fig_dir: Path, recorder) -> list[dict]:
             data = p.read_bytes()
         except OSError:
             continue
-        output_name = recorder.write_output(run_id, p.name, data)
+        output_name = recorder.write_output(run_id, p.name, data, provenance=provenance)
         fmt = "jpg" if ext == "jpeg" else ext
         viewers.append(
             {
@@ -126,7 +126,14 @@ async def code_run(
     script_path = work_dir / f"script{suffix}"
     script_path.write_text(code)
     # Persist the source itself (content-addressed) so it is downloadable & verified.
-    script_output = recorder.write_output(run_id, f"script{suffix}", code.encode())
+    prov = {
+        "tool": "code.run",
+        "language": language,
+        "backend": backend_name,
+        "source": code,
+        "how": f"Executed {language} on the {backend_name} backend; figures saved to OPENSCIENCE_FIG_DIR.",
+    }
+    script_output = recorder.write_output(run_id, f"script{suffix}", code.encode(), provenance=prov)
 
     env = {
         "MPLBACKEND": "Agg",
@@ -136,7 +143,7 @@ async def code_run(
     if backend_name == "local":
         cmd = f"{shlex.quote(interp)} {shlex.quote(str(script_path))}"
         result = await backend.run(cmd, timeout=timeout, cwd=str(work_dir), env=env)
-        viewers = _figure_viewers(run_id, fig_dir, recorder)
+        viewers = _figure_viewers(run_id, fig_dir, recorder, prov)
     else:
         # SSH/remote: stage the script, run remotely, pull figures back.
         remote_script = f"/tmp/os_{run_id}_script{suffix}"
@@ -158,7 +165,7 @@ async def code_run(
                 await backend.download(rf, str(local_path))
             except Exception:
                 continue
-        viewers = _figure_viewers(run_id, fig_dir, recorder)
+        viewers = _figure_viewers(run_id, fig_dir, recorder, prov)
 
     stdout = (result.stdout or "")[:MAX_STDOUT]
     stderr = (result.stderr or "")[:MAX_STDERR]

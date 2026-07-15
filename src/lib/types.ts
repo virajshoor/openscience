@@ -42,6 +42,7 @@ export interface RunDetail {
   conversation: Array<Record<string, unknown>>;
   review?: Record<string, unknown>;
   outputs?: string[];
+  provenance?: Record<string, unknown>;
 }
 
 export interface ComputeBackendInfo {

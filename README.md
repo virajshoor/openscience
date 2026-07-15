@@ -107,9 +107,9 @@ numeric claim and citation against tool outputs. Verdicts:
 
 ### Install the macOS app
 
-Download the Apple Silicon DMG or `.app` ZIP from the [GitHub release](https://github.com/virajshoor/openscience/releases/tag/v0.2.0). Drag OpenScience into Applications and open it. The release contains its own sidecar, so it does not require Python or `uv`.
+Download the Apple Silicon `.app` ZIP from the [GitHub release](https://github.com/virajshoor/openscience/releases/tag/v0.3.0). Drag OpenScience into Applications and open it. The release contains its own sidecar, so it does not require Python or `uv`.
 
-The current release is unsigned. On first launch, control-click OpenScience and choose **Open** if macOS displays a Gatekeeper warning.
+The release is **signed and notarized** with a Developer ID certificate. If you build it yourself from source it will be unsigned — see [Signing the app](#signing-the-app) below.
 
 ### Prerequisites
 
@@ -284,6 +284,56 @@ pnpm tauri build
 # → bundle in src-tauri/target/release/bundle/
 ```
 
+The DMG step can fail on some machines; the `.app` under
+`src-tauri/target/release/bundle/macos/` is the reliable artifact. Zip it with:
+
+```bash
+ditto -c -k --keep-parent src-tauri/target/release/bundle/macos/OpenScience.app OpenScience.app.zip
+```
+
+---
+
+## Signing the app
+
+The published macOS build is signed with a **Developer ID Application**
+certificate and notarized with `notarytool`. To reproduce from source:
+
+1. Ensure a "Developer ID Application: <Your Name> (TEAMID)" certificate is
+   installed in Keychain, and you have an app-specific password from
+   <https://appleid.apple.com>.
+
+2. Store notarytool credentials (one time):
+   ```bash
+   xcrun notarytool store-credentials "OpenScience-notary" \
+     --apple-id "you@example.com" \
+     --team-id "TEAMID" \
+     --password "app-specific-password"
+   ```
+
+3. Build, then sign and notarize:
+   ```bash
+   pnpm tauri build
+   APP="src-tauri/target/release/bundle/macos/OpenScience.app"
+   IDENTITY="Developer ID Application: Your Name (TEAMID)"
+
+   # Sign the sidecar binary first, then the app bundle (deep, timestamped, hardened runtime)
+   codesign --force --options runtime --timestamp --sign "$IDENTITY" \
+     "$APP/Contents/MacOS/openscience-sidecar"
+   codesign --force --deep --options runtime --timestamp --sign "$IDENTITY" "$APP"
+   # Verify
+   codesign --verify --strict --verbose=2 "$APP"
+
+   # Submit for notarization, wait, then staple
+   ditto -c -k --keepParent "$APP" /tmp/OpenScience.zip
+   xcrun notarytool submit /tmp/OpenScience.zip --keychain-profile "OpenScience-notary" --wait
+   xcrun stapler staple "$APP"
+   xcrun stapler validate "$APP"
+   ```
+
+The signing identity hash can be used instead of the full name if multiple
+certificates share a name: `codesign --sign <SHA-1> ...`. Find it with
+`security find-identity -v -p codesigning`.
+
 ---
 
 ## Roadmap
@@ -297,7 +347,7 @@ v0.1:
 - ✓ Reproducibility recorder with manifest + conversation + outputs
 - ✓ Automated reviewer
 
-v0.2 (this release):
+v0.2:
 - ✓ Code execution (`code.run`) — Python/R on local/SSH/Slurm with figures
 - ✓ Editable-by-chat figures (model rewrites plotting code, not the image)
 - ✓ FigureViewer for png/svg/html/pdf
@@ -308,13 +358,22 @@ v0.2 (this release):
 - ✓ Manuscript panel with Markdown/LaTeX/PDF export
 - ✓ 25 tools total (all free / no-auth public APIs)
 
-v0.3 (planned):
+v0.3 (this release):
+- ✓ Session branching — fork a run into a new branch from the Run Inspector
+- ✓ User-created specialist agents (system prompt + tool whitelist) via Settings
+- ✓ Reusable skills (saved prompts/pipelines) invokable from the top bar
+- ✓ Approval-before-spend — `compute.run`/`slurm.submit` draft a plan and wait
+  for confirmation before allocating resources
+- ✓ Plain-English provenance — every `code.run` output records the source, tool,
+  backend, and how it was generated (viewable in the Run Inspector)
+- ✓ Robust sidecar port discovery (self-heals when port 7100 is held)
+- ✓ Signed + notarized macOS build
+
+v0.4 (planned):
 - Native interactive genome browser tracks (igv.js)
-- Session branching (fork analyses like git branches)
 - Persistent loaded datasets across a session
-- User-created specialist agents & reusable skills
-- Approval-before-spend gate for HPC/cloud jobs
 - Multi-run diffing
+- NVIDIA BioNeMo integration (requires user-provided GPU infrastructure)
 
 ---
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { exportRun, fetchRun, reviewRun, verifyRun } from "../lib/api";
+import { exportRun, fetchRun, forkRun, reviewRun, verifyRun } from "../lib/api";
 import type { RunDetail } from "../lib/types";
 
 interface Props {
@@ -11,6 +11,7 @@ export default function RunInspector({ runId }: Props) {
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
   const [verification, setVerification] = useState<string | null>(null);
+  const [forkMsg, setForkMsg] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -50,6 +51,15 @@ export default function RunInspector({ runId }: Props) {
       setVerification(result.ok ? "All output hashes verified." : "One or more outputs failed verification.");
     } catch (e) {
       setVerification(`Verification failed: ${String(e)}`);
+    }
+  }
+
+  async function doFork() {
+    const res = await forkRun(runId);
+    setForkMsg(res.run_id ? `Forked to run ${res.run_id}` : `Fork failed: ${res.error || "unknown"}`);
+    if (res.run_id) {
+      // Reload into chat via a custom event the host can listen for.
+      window.dispatchEvent(new CustomEvent("openscience:load-run", { detail: res.run_id }));
     }
   }
 
@@ -137,9 +147,18 @@ export default function RunInspector({ runId }: Props) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn" onClick={doExport}>Export run as JSON</button>
           <button className="btn" onClick={doVerify}>Verify outputs</button>
+          <button className="btn" onClick={doFork}>Fork run</button>
         </div>
         {verification && <div style={{ fontSize: 12, marginTop: 8, color: verification.startsWith("All") ? "#58d4c4" : "#e76e76" }}>{verification}</div>}
+        {forkMsg && <div style={{ fontSize: 12, marginTop: 8, color: forkMsg.startsWith("Forked") ? "#58d4c4" : "#e76e76" }}>{forkMsg}</div>}
       </div>
+
+      {run.provenance && (
+        <div className="inspector-section">
+          <h4>Provenance (how outputs were generated)</h4>
+          <pre style={{ maxHeight: 320 }}>{JSON.stringify(run.provenance, null, 2)}</pre>
+        </div>
+      )}
     </div>
   );
 }

@@ -199,3 +199,33 @@ Returns:
 ```json
 {"ok": true, "file": "9f8e..._manuscript.md", "format": "markdown", "download": "runs/abc123def456/outputs/9f8e..._manuscript.md"}
 ```
+
+## Agents & skills (specialist agents / reusable skills)
+
+```
+GET /agents                       → {"agents": [{"name","system_prompt","tools"}]}
+POST /agents                      {"name","system_prompt","tools": [..]|null}
+DELETE /agents/{name}
+GET /skills                       → {"skills": [{"name","prompt","tools"}]}
+POST /skills                      {"name","prompt","tools": [..]|null}
+DELETE /skills/{name}
+```
+
+`POST /chat` accepts optional `agent` (name) — injects the agent's system prompt
+and restricts the tool set to `tools` (null = all) — and optional `skill` (name),
+which prepends the skill's prompt as a system message.
+
+## Session branching
+
+```
+POST /runs/{run_id}/fork
+```
+
+Creates a new run seeded with the parent's conversation and a `parent_run_id` in
+its manifest. Returns `{"ok": true, "run_id": "...", "parent_run_id": "..."}`.
+
+## Approval before spending compute
+
+When `require_approval` is set in config (`POST /config`), `compute.run` and
+`slurm.submit` return a draft plan with `approval_required: true` instead of
+executing. Re-invoke with `approved: true` (after the user confirms) to execute.

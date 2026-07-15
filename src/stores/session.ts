@@ -28,11 +28,15 @@ interface SessionState {
   computeBackend: string;
   runs: RunSummary[];
   sidecarOnline: boolean;
+  sidecarStarting: boolean;
   error: string | null;
   chatCount: number;
   scienceContext: string;
   manuscript: ManuscriptSection[];
   rightPane: "viewer" | "inspector" | "manuscript";
+  agent: string | null;
+  skill: string | null;
+  requireApproval: boolean;
   setConfig: (c: Partial<LLMConfig>) => void;
   setCompute: (b: string) => void;
   pushMessage: (m: ChatMessage) => void;
@@ -41,10 +45,14 @@ interface SessionState {
   setViewer: (v: ViewerArtifact | null) => void;
   setRuns: (r: RunSummary[]) => void;
   setSidecarOnline: (b: boolean) => void;
+  setSidecarStarting: (b: boolean) => void;
   setError: (e: string | null) => void;
   incrementChatCount: () => void;
   setScienceContext: (c: string) => void;
   setRightPane: (p: "viewer" | "inspector" | "manuscript") => void;
+  setAgent: (a: string | null) => void;
+  setSkill: (s: string | null) => void;
+  setRequireApproval: (b: boolean) => void;
   addSection: (s: ManuscriptSection) => void;
   updateSection: (id: string, patch: Partial<ManuscriptSection>) => void;
   removeSection: (id: string) => void;
@@ -71,11 +79,15 @@ export const useSession = create<SessionState>()(
       computeBackend: "local",
       runs: [],
       sidecarOnline: false,
+      sidecarStarting: false,
       error: null,
       chatCount: 0,
       scienceContext: "",
       manuscript: [],
       rightPane: "viewer",
+      agent: null,
+      skill: null,
+      requireApproval: false,
       setConfig: (c) => set((s) => ({ config: { ...s.config, ...c } })),
       setCompute: (b) => set({ computeBackend: b }),
       pushMessage: (m) => set((s) => ({ messages: [...s.messages, m] })),
@@ -89,10 +101,14 @@ export const useSession = create<SessionState>()(
       setViewer: (v) => set({ viewer: v }),
       setRuns: (r) => set({ runs: r }),
       setSidecarOnline: (b) => set({ sidecarOnline: b }),
+      setSidecarStarting: (b) => set({ sidecarStarting: b }),
       setError: (e) => set({ error: e }),
       incrementChatCount: () => set((s) => ({ chatCount: s.chatCount + 1 })),
       setScienceContext: (c) => set({ scienceContext: c }),
       setRightPane: (p) => set({ rightPane: p }),
+      setAgent: (a) => set({ agent: a }),
+      setSkill: (s) => set({ skill: s }),
+      setRequireApproval: (b) => set({ requireApproval: b }),
       addSection: (sec) => set((s) => ({ manuscript: [...s.manuscript, sec] })),
       updateSection: (id, patch) =>
         set((s) => ({ manuscript: s.manuscript.map((sec) => (sec.id === id ? { ...sec, ...patch } : sec)) })),
@@ -112,7 +128,7 @@ export const useSession = create<SessionState>()(
     }),
     {
       name: "openscience-session",
-      version: 5,
+      version: 6,
       migrate: (persisted) => {
         const state = persisted as {
           config?: Partial<LLMConfig>;
@@ -123,6 +139,9 @@ export const useSession = create<SessionState>()(
           scienceContext?: string;
           manuscript?: ManuscriptSection[];
           rightPane?: "viewer" | "inspector" | "manuscript";
+          agent?: string | null;
+          skill?: string | null;
+          requireApproval?: boolean;
         };
         return {
           config: { ...defaultConfig, ...state.config, apiKey: "" },
@@ -133,6 +152,9 @@ export const useSession = create<SessionState>()(
           scienceContext: state.scienceContext ?? "",
           manuscript: state.manuscript ?? [],
           rightPane: state.rightPane ?? "viewer",
+          agent: state.agent ?? null,
+          skill: state.skill ?? null,
+          requireApproval: state.requireApproval ?? false,
         };
       },
       partialize: (s) => ({
@@ -144,6 +166,9 @@ export const useSession = create<SessionState>()(
         scienceContext: s.scienceContext,
         manuscript: s.manuscript,
         rightPane: s.rightPane,
+        agent: s.agent,
+        skill: s.skill,
+        requireApproval: s.requireApproval,
       }),
     }
   )

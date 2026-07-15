@@ -43,7 +43,7 @@ class Recorder:
         self.runs_dir = Path(runs_dir)
         self.runs_dir.mkdir(parents=True, exist_ok=True)
 
-    def start(self, config: dict) -> str:
+    def start(self, config: dict, parent_run_id: str | None = None) -> str:
         run_id = uuid.uuid4().hex[:12]
         run_dir = self.runs_dir / run_id
         (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
@@ -58,8 +58,26 @@ class Recorder:
             "config": safe_config,
             "env": _pip_freeze(),
         }
+        if parent_run_id:
+            manifest["parent_run_id"] = parent_run_id
         (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
         (run_dir / "conversation.json").write_text("[]")
+        return run_id
+
+    def fork(self, parent_run_id: str, config: dict) -> str | None:
+        """Create a new run seeded with a parent's conversation (session branching).
+
+        The new run records `parent_run_id` in its manifest and starts with a copy
+        of the parent's conversation so the user can diverge without losing the
+        original workflow.
+        """
+        parent = self.runs_dir / parent_run_id
+        if not parent.exists():
+            return None
+        run_id = self.start(config, parent_run_id=parent_run_id)
+        conv_path = parent / "conversation.json"
+        if conv_path.exists():
+            (self.runs_dir / run_id / "conversation.json").write_text(conv_path.read_text())
         return run_id
 
     def append(self, run_id: str, role: str, payload: Any) -> None:
@@ -71,14 +89,31 @@ class Recorder:
         conv[-1] = {"role": role, "ts": time.time(), "payload": payload}
         conv_path.write_text(json.dumps(conv, default=str, indent=2))
 
-    def write_output(self, run_id: str, filename: str, data: bytes) -> str:
+    def write_output(self, run_id: str, filename: str, data: bytes, provenance: dict | None = None) -> str:
         run_dir = self.runs_dir / run_id / "outputs"
         run_dir.mkdir(parents=True, exist_ok=True)
         # Prepend hash to detect tampering
         digest = hashlib.sha256(data).hexdigest()[:8]
         name = f"{digest}_{Path(filename).name}"
         (run_dir / name).write_bytes(data)
+        if provenance:
+            self._record_provenance(run_id, name, provenance)
         return name
+
+    def _record_provenance(self, run_id: str, output_name: str, provenance: dict) -> None:
+        """Append a plain-English provenance entry for an output (audit trail)."""
+        prov_path = self.runs_dir / run_id / "provenance.json"
+        prov = {}
+        if prov_path.exists():
+            try:
+                prov = json.loads(prov_path.read_text())
+            except json.JSONDecodeError:
+                prov = {}
+        prov[output_name] = {
+            "ts": time.time(),
+            **provenance,
+        }
+        prov_path.write_text(json.dumps(prov, default=str, indent=2))
 
     def write_review(self, run_id: str, review: dict) -> None:
         run_dir = self.runs_dir / run_id
@@ -136,6 +171,12 @@ class Recorder:
         rp = run_dir / "review.json"
         if rp.exists():
             out["review"] = json.loads(rp.read_text())
+        pp = run_dir / "provenance.json"
+        if pp.exists():
+            try:
+                out["provenance"] = json.loads(pp.read_text())
+            except json.JSONDecodeError:
+                pass
         # List outputs
         op = run_dir / "outputs"
         if op.exists():

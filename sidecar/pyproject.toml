@@ -1,6 +1,6 @@
 [project]
 name = "openscience-sidecar"
-version = "0.2.0"
+version = "0.3.0"
 description = "OpenScience Python sidecar: LLM client, tools, compute, reproducibility"
 requires-python = ">=3.10"
 license = "MIT"

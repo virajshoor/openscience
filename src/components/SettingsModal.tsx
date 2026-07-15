@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { IconTrash } from "@tabler/icons-react";
 import { useSession } from "../stores/session";
-import { configureSSH } from "../lib/api";
+import { configureSSH, listAgents, saveAgent, deleteAgent, listSkills, saveSkill, deleteSkill } from "../lib/api";
+import type { Agent, Skill } from "../lib/api";
 
 interface Props {
   onClose: () => void;
@@ -11,13 +13,27 @@ export default function SettingsModal({ onClose }: Props) {
   const setConfig = useSession((s) => s.setConfig);
   const computeBackend = useSession((s) => s.computeBackend);
   const setCompute = useSession((s) => s.setCompute);
+  const requireApproval = useSession((s) => s.requireApproval);
+  const setRequireApproval = useSession((s) => s.setRequireApproval);
   const [sshHost, setSshHost] = useState("");
   const [sshUser, setSshUser] = useState("");
   const [sshPort, setSshPort] = useState("22");
   const [sshKey, setSshKey] = useState("");
   const [sshMsg, setSshMsg] = useState<string | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [agentName, setAgentName] = useState("");
+  const [agentPrompt, setAgentPrompt] = useState("");
+  const [skillName, setSkillName] = useState("");
+  const [skillPrompt, setSkillPrompt] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+
+  async function refreshAgentsSkills() {
+    setAgents(await listAgents());
+    setSkills(await listSkills());
+  }
+  useEffect(() => { refreshAgentsSkills(); }, []);
 
   useEffect(() => {
     closeBtnRef.current?.focus();
@@ -140,6 +156,16 @@ export default function SettingsModal({ onClose }: Props) {
           <div className="field-hint">"ssh"/"slurm" require configuring an SSH connection below. Slurm jobs are submitted via sbatch on the SSH host.</div>
         </div>
 
+        <label className="checkbox-row">
+          <input
+            id="cfg-approval"
+            type="checkbox"
+            checked={requireApproval}
+            onChange={(e) => setRequireApproval(e.target.checked)}
+          />
+          Require approval before spending compute (drafts a plan before running jobs)
+        </label>
+
         <div className="field">
           <label htmlFor="ssh-host">SSH host</label>
           <input id="ssh-host" value={sshHost} onChange={(e) => setSshHost(e.target.value)} placeholder="lab-box.university.edu" />
@@ -159,6 +185,44 @@ export default function SettingsModal({ onClose }: Props) {
           <input id="ssh-key" value={sshKey} onChange={(e) => setSshKey(e.target.value)} placeholder="~/.ssh/id_rsa" />
         </div>
         {sshMsg && <div className="field-hint" style={{ color: sshMsg.includes("configured") ? "#58d4c4" : "#e76e76" }}>{sshMsg}</div>}
+
+        <div style={{ height: 1, background: "#1c2230", margin: "16px 0" }} />
+
+        <div className="field">
+          <label>Specialist agents</label>
+          <div className="field-hint">Custom agents inject a system prompt and (optionally) restrict the tool set during a chat. Select one from the top bar to activate it.</div>
+          {agents.map((a) => (
+            <div key={a.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "2px 0" }}>
+              <span>{a.name}{a.tools ? ` (${a.tools.length} tools)` : " (all tools)"}</span>
+              <button className="btn" style={{ padding: "1px 5px" }} onClick={async () => { await deleteAgent(a.name); refreshAgentsSkills(); }}><IconTrash size={11} /></button>
+            </div>
+          ))}
+          <input value={agentName} onChange={(e) => setAgentName(e.target.value)} placeholder="agent name e.g. structural-biologist" style={{ marginTop: 6 }} />
+          <textarea value={agentPrompt} onChange={(e) => setAgentPrompt(e.target.value)} placeholder="system prompt" rows={2} style={{ width: "100%", marginTop: 4, background: "#0b0e14", color: "#e5e7eb", border: "1px solid #1c2230", borderRadius: 4, padding: 6 }} />
+          <button className="btn" style={{ marginTop: 4, padding: "3px 9px", fontSize: 12 }} onClick={async () => {
+            if (!agentName.trim()) return;
+            await saveAgent({ name: agentName.trim(), system_prompt: agentPrompt, tools: null });
+            setAgentName(""); setAgentPrompt(""); refreshAgentsSkills();
+          }}>Add agent</button>
+        </div>
+
+        <div className="field">
+          <label>Reusable skills</label>
+          <div className="field-hint">A skill is a saved prompt (e.g. a trusted pipeline) you can re-invoke from the top bar.</div>
+          {skills.map((s) => (
+            <div key={s.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "2px 0" }}>
+              <span>{s.name}</span>
+              <button className="btn" style={{ padding: "1px 5px" }} onClick={async () => { await deleteSkill(s.name); refreshAgentsSkills(); }}><IconTrash size={11} /></button>
+            </div>
+          ))}
+          <input value={skillName} onChange={(e) => setSkillName(e.target.value)} placeholder="skill name e.g. qc-rnaseq" style={{ marginTop: 6 }} />
+          <textarea value={skillPrompt} onChange={(e) => setSkillPrompt(e.target.value)} placeholder="prompt / pipeline instructions" rows={2} style={{ width: "100%", marginTop: 4, background: "#0b0e14", color: "#e5e7eb", border: "1px solid #1c2230", borderRadius: 4, padding: 6 }} />
+          <button className="btn" style={{ marginTop: 4, padding: "3px 9px", fontSize: 12 }} onClick={async () => {
+            if (!skillName.trim()) return;
+            await saveSkill({ name: skillName.trim(), prompt: skillPrompt, tools: null });
+            setSkillName(""); setSkillPrompt(""); refreshAgentsSkills();
+          }}>Add skill</button>
+        </div>
 
         <div className="settings-actions">
           <button className="btn" onClick={saveSSH}>Save SSH</button>

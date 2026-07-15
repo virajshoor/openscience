@@ -36,9 +36,45 @@ SAFE_RUN_ID = re.compile(r"^[a-f0-9]{12}$")
 SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 CONFIG_DIR = Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience")))
-PERSISTED_CONFIG_KEYS = {"base_url", "model", "temperature", "use_tools", "compute"}
+PERSISTED_CONFIG_KEYS = {"base_url", "model", "temperature", "use_tools", "compute", "require_approval"}
 KEYCHAIN_SERVICE = "ai.openscience.workbench"
 KEYCHAIN_ACCOUNT = "openai-api-key"
+
+
+def _agents_file() -> Path:
+    return Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience"))) / "agents.json"
+
+
+def _skills_file() -> Path:
+    return Path(os.environ.get("OS_CONFIG_DIR", os.path.expanduser("~/.openscience"))) / "skills.json"
+
+
+def _load_json_list(path: Path) -> list[dict]:
+    if path.exists():
+        try:
+            data = json.loads(path.read_text())
+            return data if isinstance(data, list) else []
+        except json.JSONDecodeError:
+            return []
+    return []
+
+
+def _save_json_list(path: Path, items: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(items, indent=2))
+
+
+def _upsert(items: list[dict], item: dict, key: str = "name") -> list[dict]:
+    name = item.get(key)
+    if not name:
+        return items
+    out = [i for i in items if i.get(key) != name]
+    out.append(item)
+    return out
+
+
+def _remove(items: list[dict], name: str, key: str = "name") -> list[dict]:
+    return [i for i in items if i.get(key) != name]
 
 
 def _config_file() -> Path:
@@ -117,6 +153,7 @@ async def lifespan(app: FastAPI):
     # SSH backend is lazy-configured via /compute endpoint
     state["ssh"] = None
     state["llm"] = LLMClient()
+    state["require_approval"] = bool(load_config().get("require_approval", False))
     # import tools so they register
     from .tools import (  # noqa: F401
         uniprot, pdb, entrez, chembl, code, compute,
@@ -127,7 +164,7 @@ async def lifespan(app: FastAPI):
         state["ssh"].close()
 
 
-app = FastAPI(title="OpenScience Sidecar", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="OpenScience Sidecar", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -155,11 +192,15 @@ async def chat(req: dict):
 
     Each event is a single line: data: <json>\n\n
     where <json> is {"event": "...", "data": ...}
+
+    Optional `agent` (name) injects a specialist agent's system prompt and
+    restricts the tool set. Optional `skill` (name) prepends a reusable skill
+    prompt to the conversation.
     """
     from fastapi.responses import StreamingResponse
     llm: LLMClient = state["llm"]
     recorder: Recorder = state["recorder"]
-    messages = req.get("messages", [])
+    messages = [dict(m) for m in req.get("messages", [])]
     config = req.get("config", {})
     backend_name = req.get("compute", "local")
     # "slurm" runs on the SSH host (sbatch via the SSH backend); "ssh"/"slurm" both
@@ -169,8 +210,26 @@ async def chat(req: dict):
     else:
         backend = state["backends"].get(backend_name) or state["backends"]["local"]
 
+    tools = registry.tools
+    agent_name = req.get("agent")
+    if agent_name:
+        agent = next((a for a in _load_json_list(_agents_file()) if a.get("name") == agent_name), None)
+        if agent:
+            sp = agent.get("system_prompt") or ""
+            if sp and (not messages or messages[0].get("role") != "system"):
+                messages.insert(0, {"role": "system", "content": sp})
+            allowed = agent.get("tools")
+            if isinstance(allowed, list) and allowed:
+                tools = {n: t for n, t in registry.tools.items() if n in allowed}
+
+    skill_name = req.get("skill")
+    if skill_name:
+        skill = next((s for s in _load_json_list(_skills_file()) if s.get("name") == skill_name), None)
+        if skill and skill.get("prompt"):
+            messages.insert(0, {"role": "system", "content": skill["prompt"]})
+
     async def event_stream():
-        async for evt in llm.run(messages, config=config, tools=registry.tools, backend=backend, recorder=recorder):
+        async for evt in llm.run(messages, config=config, tools=tools, backend=backend, recorder=recorder):
             yield f"data: {json.dumps(evt, default=str)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -252,6 +311,7 @@ async def get_config():
 async def save_user_config(req: dict):
     """Persist preferences locally and save an API key in macOS Keychain."""
     save_config(req)
+    state["require_approval"] = bool(req.get("require_approval", False))
     return {"ok": True}
 
 
@@ -262,7 +322,79 @@ async def clear_config():
     if f.exists():
         f.unlink()
     _delete_keychain_api_key()
+    state["require_approval"] = False
     return {"ok": True}
+
+
+# --- Specialist agents (user-created) -----------------------------------------
+
+@app.get("/agents")
+async def list_agents():
+    return {"agents": _load_json_list(_agents_file())}
+
+
+@app.post("/agents")
+async def save_agent(req: dict):
+    name = str(req.get("name", "")).strip()
+    if not name:
+        return {"error": "name required"}
+    agent = {
+        "name": name,
+        "system_prompt": str(req.get("system_prompt", "")),
+        "tools": req.get("tools"),  # list[str] | None (None = all tools)
+    }
+    items = _upsert(_load_json_list(_agents_file()), agent)
+    _save_json_list(_agents_file(), items)
+    return {"ok": True, "agent": agent}
+
+
+@app.delete("/agents/{name}")
+async def delete_agent(name: str):
+    items = _remove(_load_json_list(_agents_file()), name)
+    _save_json_list(_agents_file(), items)
+    return {"ok": True}
+
+
+# --- Reusable skills (saved prompts / pipelines) ------------------------------
+
+@app.get("/skills")
+async def list_skills():
+    return {"skills": _load_json_list(_skills_file())}
+
+
+@app.post("/skills")
+async def save_skill(req: dict):
+    name = str(req.get("name", "")).strip()
+    if not name:
+        return {"error": "name required"}
+    skill = {
+        "name": name,
+        "prompt": str(req.get("prompt", "")),
+        "tools": req.get("tools"),
+    }
+    items = _upsert(_load_json_list(_skills_file()), skill)
+    _save_json_list(_skills_file(), items)
+    return {"ok": True, "skill": skill}
+
+
+@app.delete("/skills/{name}")
+async def delete_skill(name: str):
+    items = _remove(_load_json_list(_skills_file()), name)
+    _save_json_list(_skills_file(), items)
+    return {"ok": True}
+
+
+# --- Session branching (fork a run) -------------------------------------------
+
+@app.post("/runs/{run_id}/fork")
+async def fork_run(run_id: str):
+    if not SAFE_RUN_ID.fullmatch(run_id):
+        raise HTTPException(status_code=404, detail="run not found")
+    recorder: Recorder = state["recorder"]
+    new_id = recorder.fork(run_id, {})
+    if not new_id:
+        raise HTTPException(status_code=404, detail="parent run not found")
+    return {"ok": True, "run_id": new_id, "parent_run_id": run_id}
 
 
 @app.post("/manuscript/export")

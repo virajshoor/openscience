@@ -91,7 +91,7 @@ export async function streamChat(
   cb: StreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
-  const { config, computeBackend } = useSession.getState();
+  const { config, computeBackend, agent, skill } = useSession.getState();
   let r: Response;
   try {
     r = await fetch(`${u()}/chat`, {
@@ -101,6 +101,8 @@ export async function streamChat(
         messages,
         config: sidecarConfig(config),
         compute: computeBackend,
+        ...(agent ? { agent } : {}),
+        ...(skill ? { skill } : {}),
       }),
       signal,
     });
@@ -216,5 +218,74 @@ export async function exportManuscript(
     return r.json();
   } catch (e) {
     return { ok: false, error: String(e) };
+  }
+}
+
+export interface Agent {
+  name: string;
+  system_prompt: string;
+  tools: string[] | null;
+}
+export interface Skill {
+  name: string;
+  prompt: string;
+  tools: string[] | null;
+}
+
+export async function listAgents(): Promise<Agent[]> {
+  try {
+    const r = await fetch(`${u()}/agents`);
+    if (!r.ok) return [];
+    return (await r.json()).agents ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveAgent(a: Agent): Promise<boolean> {
+  const r = await fetch(`${u()}/agents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(a),
+  });
+  return r.ok;
+}
+
+export async function deleteAgent(name: string): Promise<boolean> {
+  const r = await fetch(`${u()}/agents/${encodeURIComponent(name)}`, { method: "DELETE" });
+  return r.ok;
+}
+
+export async function listSkills(): Promise<Skill[]> {
+  try {
+    const r = await fetch(`${u()}/skills`);
+    if (!r.ok) return [];
+    return (await r.json()).skills ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveSkill(s: Skill): Promise<boolean> {
+  const r = await fetch(`${u()}/skills`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(s),
+  });
+  return r.ok;
+}
+
+export async function deleteSkill(name: string): Promise<boolean> {
+  const r = await fetch(`${u()}/skills/${encodeURIComponent(name)}`, { method: "DELETE" });
+  return r.ok;
+}
+
+export async function forkRun(runId: string): Promise<{ run_id?: string; error?: string }> {
+  try {
+    const r = await fetch(`${u()}/runs/${runId}/fork`, { method: "POST" });
+    if (!r.ok) return { error: `HTTP ${r.status}` };
+    return r.json();
+  } catch (e) {
+    return { error: String(e) };
   }
 }

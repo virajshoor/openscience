@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconSettings, IconRefresh, IconBrain, IconMicroscope, IconHistory } from "@tabler/icons-react";
 import openScienceLogo from "./assets/openscience-logo.svg";
 import { getSidecarUrl, useSession, setSidecarUrl } from "./stores/session";
-import { checkHealth, fetchRuns, fetchRun, streamChat, loadPersistedConfig, persistConfig } from "./lib/api";
+import { checkHealth, fetchRuns, fetchRun, streamChat, loadPersistedConfig, persistConfig, listAgents, listSkills } from "./lib/api";
 import ChatPanel from "./components/ChatPanel";
 import ViewerPanel from "./components/ViewerPanel";
 import RunInspector from "./components/RunInspector";
@@ -108,6 +108,8 @@ Accumulated science context:
 export default function App() {
   const setSidecarOnline = useSession((s) => s.setSidecarOnline);
   const sidecarOnline = useSession((s) => s.sidecarOnline);
+  const sidecarStarting = useSession((s) => s.sidecarStarting);
+  const setSidecarStarting = useSession((s) => s.setSidecarStarting);
   const setRuns = useSession((s) => s.setRuns);
   const runs = useSession((s) => s.runs);
   const clear = useSession((s) => s.clear);
@@ -159,12 +161,17 @@ export default function App() {
       // held by a stale process so the shell picked a different port.
       const cur = getSidecarUrl();
       const curPort = parseInt(cur.split(":").pop() || "7100", 10);
-      const found = await findSidecarPort(curPort);
-      if (found && found !== curPort) {
-        setSidecarUrl(`http://127.0.0.1:${found}`);
+      const ipcPort = await discoverSidecarPort();
+      let port = ipcPort;
+      if (!port) port = await findSidecarPort(curPort);
+      if (port && port !== curPort) {
+        setSidecarUrl(`http://127.0.0.1:${port}`);
       }
       const ok = await checkHealth();
       setSidecarOnline(ok);
+      // "starting" = the shell has spawned a sidecar (or one was found) but it
+      // isn't healthy yet (cold PyInstaller extraction). Distinct from "offline".
+      setSidecarStarting(!ok && (!!ipcPort || !!port));
       if (ok) {
         if (!online) {
           const rs = await fetchRuns();
@@ -194,14 +201,36 @@ export default function App() {
         if (c.temperature !== undefined) useSession.getState().setConfig({ temperature: c.temperature as number });
         if (c.use_tools !== undefined) useSession.getState().setConfig({ useTools: c.use_tools as boolean });
         if (c.compute) useSession.getState().setCompute(c.compute as string);
+        if (c.require_approval !== undefined) useSession.getState().setRequireApproval(c.require_approval as boolean);
       }
       poll();
     })();
     return () => clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    function onLoadRun(e: Event) {
+      const id = (e as CustomEvent<string>).detail;
+      if (id) loadRunIntoChat(id);
+    }
+    window.addEventListener("openscience:load-run", onLoadRun as EventListener);
+    return () => window.removeEventListener("openscience:load-run", onLoadRun as EventListener);
+  }, []);
+
   const config = useSession((s) => s.config);
   const computeBackend = useSession((s) => s.computeBackend);
+  const requireApproval = useSession((s) => s.requireApproval);
+  const agent = useSession((s) => s.agent);
+  const setAgent = useSession((s) => s.setAgent);
+  const skill = useSession((s) => s.skill);
+  const setSkill = useSession((s) => s.setSkill);
+  const [agentList, setAgentList] = useState<{ name: string }[]>([]);
+  const [skillList, setSkillList] = useState<{ name: string }[]>([]);
+  useEffect(() => {
+    if (!sidecarOnline) return;
+    listAgents().then((a) => setAgentList(a));
+    listSkills().then((s) => setSkillList(s));
+  }, [sidecarOnline]);
   useEffect(() => {
     persistConfig({
       base_url: config.baseUrl,
@@ -210,8 +239,9 @@ export default function App() {
       temperature: config.temperature,
       use_tools: config.useTools,
       compute: computeBackend,
+      require_approval: requireApproval,
     });
-  }, [config, computeBackend]);
+  }, [config, computeBackend, requireApproval]);
 
   async function loadRunIntoChat(runId: string) {
     viewingRun.current = true;
@@ -419,8 +449,11 @@ Output only the synthesized context, no preamble.`;
       <main className="main-area">
         <div className="topbar">
           <div className="topbar-status" aria-live="polite">
-            <span className={`pill ${sidecarOnline ? "" : "badge-fail"}`}>
-              {sidecarOnline ? "sidecar: online" : "sidecar: offline"}
+            <span
+              className={`pill ${sidecarOnline ? "badge-pass" : sidecarStarting ? "badge-flag" : "badge-fail"}`}
+              title={sidecarOnline ? "Sidecar is running" : sidecarStarting ? "Starting the Python sidecar…" : "Sidecar not reachable"}
+            >
+              {sidecarOnline ? "sidecar: online" : sidecarStarting ? "sidecar: starting…" : "sidecar: offline"}
             </span>
             <span className="pill">
               <IconBrain size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
@@ -430,6 +463,24 @@ Output only the synthesized context, no preamble.`;
               <IconMicroscope size={11} style={{ verticalAlign: "middle", marginRight: 4 }} />
               {computeBackend}
             </span>
+            <select
+              value={agent ?? ""}
+              onChange={(e) => setAgent(e.target.value || null)}
+              title="Specialist agent"
+              style={{ background: "transparent", border: "1px solid #1c2230", color: "#9ca3af", borderRadius: 4, padding: "2px 4px", fontSize: 11 }}
+            >
+              <option value="">no agent</option>
+              {agentList.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}
+            </select>
+            <select
+              value={skill ?? ""}
+              onChange={(e) => setSkill(e.target.value || null)}
+              title="Reusable skill"
+              style={{ background: "transparent", border: "1px solid #1c2230", color: "#9ca3af", borderRadius: 4, padding: "2px 4px", fontSize: 11 }}
+            >
+              <option value="">no skill</option>
+              {skillList.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+            </select>
             {scienceContext && (
               <span className="pill" title="Accumulated science context from prior chats">
                 ctx: {Math.round(scienceContext.length / 100) / 10}k
