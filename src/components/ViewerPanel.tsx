@@ -2,6 +2,7 @@ import { useSession } from "../stores/session";
 import ProteinViewer from "./viewers/ProteinViewer";
 import GenomeViewer from "./viewers/GenomeViewer";
 import ChemViewer from "./viewers/ChemViewer";
+import FigureViewer from "./viewers/FigureViewer";
 
 export default function ViewerPanel() {
   const viewer = useSession((s) => s.viewer);
@@ -23,6 +24,7 @@ export default function ViewerPanel() {
   if (viewer.type === "protein") return <ProteinViewer src={viewer.src} label={viewer.label} />;
   if (viewer.type === "genome") return <GenomeViewer src={viewer.src} label={viewer.label} />;
   if (viewer.type === "chem") return <ChemViewer smiles={viewer.smiles} label={viewer.label} />;
+  if (viewer.type === "figure") return <FigureViewer src={viewer.src} label={viewer.label} format={viewer.format} />;
 
   return <div className="viewer-empty">Unsupported viewer</div>;
 }

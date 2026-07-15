@@ -34,6 +34,22 @@ Override via the `OS_ALLOWED_ORIGINS` environment variable (comma-separated).
 - Does NOT auto-accept unknown host keys.
 - Host keys must be present in `~/.ssh/known_hosts`.
 
+## Code execution (`code.run`)
+
+`code.run` executes arbitrary Python/R on the selected compute backend.
+
+- This is a **trusted single-user desktop application**, not a multi-tenant
+  service. User code runs under your own OS account on your own machine (or,
+  over SSH, on a host you configured). There is **no OS-level sandbox**
+  (no seccomp, no container) around executed code.
+- A timeout is enforced via `asyncio.wait_for`; the matplotlib backend is
+  forced to `Agg` so GUI backends cannot hang the process; outputs are scoped
+  to a per-run `work/` directory under `~/.openscience/runs/<id>/`.
+- Executed code can make network calls and read files your account can access.
+  If you need isolation, run the sidecar inside a container or VM.
+- The full source, stdout/stderr, and produced figures are recorded in the run
+  for reproducibility and verified via content-addressed hashes.
+
 ## Path traversal protection
 
 - Run IDs are validated against `^[a-f0-9]{12}$`.

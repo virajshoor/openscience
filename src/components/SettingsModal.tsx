@@ -135,8 +135,9 @@ export default function SettingsModal({ onClose }: Props) {
           <select id="cfg-compute" value={computeBackend} onChange={(e) => setCompute(e.target.value)}>
             <option value="local">local</option>
             <option value="ssh">ssh</option>
+            <option value="slurm">slurm (via SSH)</option>
           </select>
-          <div className="field-hint">"ssh" requires configuring an SSH connection below.</div>
+          <div className="field-hint">"ssh"/"slurm" require configuring an SSH connection below. Slurm jobs are submitted via sbatch on the SSH host.</div>
         </div>
 
         <div className="field">

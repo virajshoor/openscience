@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -116,13 +118,16 @@ async def lifespan(app: FastAPI):
     state["ssh"] = None
     state["llm"] = LLMClient()
     # import tools so they register
-    from .tools import uniprot, pdb, entrez, chembl  # noqa: F401
+    from .tools import (  # noqa: F401
+        uniprot, pdb, entrez, chembl, code, compute,
+        ensembl, clinvar, geo, alphafold, pubmed, europepmc, crossref,
+    )
     yield
     if state.get("ssh"):
         state["ssh"].close()
 
 
-app = FastAPI(title="OpenScience Sidecar", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="OpenScience Sidecar", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -157,7 +162,12 @@ async def chat(req: dict):
     messages = req.get("messages", [])
     config = req.get("config", {})
     backend_name = req.get("compute", "local")
-    backend: ComputeBackend = state["backends"].get(backend_name) or state.get("ssh") or state["backends"]["local"]
+    # "slurm" runs on the SSH host (sbatch via the SSH backend); "ssh"/"slurm" both
+    # resolve to the lazily-configured SSH backend, falling back to local.
+    if backend_name in ("ssh", "slurm"):
+        backend: ComputeBackend = state.get("ssh") or state["backends"]["local"]
+    else:
+        backend = state["backends"].get(backend_name) or state["backends"]["local"]
 
     async def event_stream():
         async for evt in llm.run(messages, config=config, tools=registry.tools, backend=backend, recorder=recorder):
@@ -203,6 +213,7 @@ async def list_compute():
     out = {"backends": [{"name": "local", "type": "local"}]}
     if state.get("ssh"):
         out["backends"].append({"name": "ssh", "type": "ssh"})
+        out["backends"].append({"name": "slurm", "type": "slurm"})
     return out
 
 
@@ -252,3 +263,61 @@ async def clear_config():
         f.unlink()
     _delete_keychain_api_key()
     return {"ok": True}
+
+
+@app.post("/manuscript/export")
+async def export_manuscript(req: dict):
+    """Assemble manuscript sections and export to Markdown/LaTeX/PDF.
+
+    Body: { "markdown": str, "bib": str | None, "format": "markdown"|"latex"|"pdf", "run_id": str }
+    The assembled manuscript (and bibliography) are saved to the run's outputs for
+    reproducibility. LaTeX/PDF require `pandoc` on PATH (PDF also needs a LaTeX
+    engine); otherwise the endpoint falls back to returning Markdown.
+    """
+    recorder: Recorder = state["recorder"]
+    markdown = str(req.get("markdown", ""))
+    bib = req.get("bib")
+    fmt = req.get("format", "markdown")
+    run_id = req.get("run_id")
+    if not SAFE_RUN_ID.fullmatch(run_id or ""):
+        return {"error": "a valid run_id is required"}
+
+    md_name = recorder.write_output(run_id, "manuscript.md", markdown.encode())
+    bib_name = None
+    if bib:
+        bib_name = recorder.write_output(run_id, "citations.bib", str(bib).encode())
+
+    outputs_dir = recorder.runs_dir / run_id / "outputs"
+
+    if fmt == "markdown":
+        return {"ok": True, "file": md_name, "format": "markdown",
+                "download": f"runs/{run_id}/outputs/{md_name}"}
+
+    if not shutil.which("pandoc"):
+        return {"ok": True, "file": md_name, "format": "markdown",
+                "download": f"runs/{run_id}/outputs/{md_name}",
+                "warning": "pandoc not installed; exported Markdown instead of " + fmt}
+
+    out_ext = "tex" if fmt == "latex" else "pdf"
+    out_name = f"manuscript_pandoc_{os.getpid()}.{out_ext}"
+    md_path = outputs_dir / md_name
+    out_path = outputs_dir / out_name
+    cmd = ["pandoc", str(md_path), "-o", str(out_path)]
+    if bib_name:
+        cmd += ["--bibliography", str(outputs_dir / bib_name)]
+    if fmt == "pdf":
+        cmd += ["--pdf-engine=xelatex"]
+    try:
+        proc = await state["backends"]["local"].run(
+            " ".join(shlex.quote(a) for a in cmd), timeout=120
+        )
+        if proc.exit_code != 0 or not out_path.is_file():
+            return {"ok": True, "file": md_name, "format": "markdown",
+                    "download": f"runs/{run_id}/outputs/{md_name}",
+                    "warning": f"pandoc failed (exit {proc.exit_code}); exported Markdown. stderr: {proc.stderr[:300]}"}
+        return {"ok": True, "file": out_name, "format": fmt,
+                "download": f"runs/{run_id}/outputs/{out_name}"}
+    except Exception as e:
+        return {"ok": True, "file": md_name, "format": "markdown",
+                "download": f"runs/{run_id}/outputs/{md_name}",
+                "warning": f"export error: {e}; exported Markdown."}

@@ -14,6 +14,12 @@ export function getSidecarUrl(): string {
 
 export const SIDECAR_URL = _sidecarUrl;
 
+export interface ManuscriptSection {
+  id: string;
+  title: string;
+  markdown: string;
+}
+
 interface SessionState {
   messages: ChatMessage[];
   streaming: boolean;
@@ -25,6 +31,8 @@ interface SessionState {
   error: string | null;
   chatCount: number;
   scienceContext: string;
+  manuscript: ManuscriptSection[];
+  rightPane: "viewer" | "inspector" | "manuscript";
   setConfig: (c: Partial<LLMConfig>) => void;
   setCompute: (b: string) => void;
   pushMessage: (m: ChatMessage) => void;
@@ -36,6 +44,12 @@ interface SessionState {
   setError: (e: string | null) => void;
   incrementChatCount: () => void;
   setScienceContext: (c: string) => void;
+  setRightPane: (p: "viewer" | "inspector" | "manuscript") => void;
+  addSection: (s: ManuscriptSection) => void;
+  updateSection: (id: string, patch: Partial<ManuscriptSection>) => void;
+  removeSection: (id: string) => void;
+  moveSection: (id: string, dir: -1 | 1) => void;
+  clearManuscript: () => void;
   clear: () => void;
 }
 
@@ -60,6 +74,8 @@ export const useSession = create<SessionState>()(
       error: null,
       chatCount: 0,
       scienceContext: "",
+      manuscript: [],
+      rightPane: "viewer",
       setConfig: (c) => set((s) => ({ config: { ...s.config, ...c } })),
       setCompute: (b) => set({ computeBackend: b }),
       pushMessage: (m) => set((s) => ({ messages: [...s.messages, m] })),
@@ -76,11 +92,27 @@ export const useSession = create<SessionState>()(
       setError: (e) => set({ error: e }),
       incrementChatCount: () => set((s) => ({ chatCount: s.chatCount + 1 })),
       setScienceContext: (c) => set({ scienceContext: c }),
+      setRightPane: (p) => set({ rightPane: p }),
+      addSection: (sec) => set((s) => ({ manuscript: [...s.manuscript, sec] })),
+      updateSection: (id, patch) =>
+        set((s) => ({ manuscript: s.manuscript.map((sec) => (sec.id === id ? { ...sec, ...patch } : sec)) })),
+      removeSection: (id) => set((s) => ({ manuscript: s.manuscript.filter((sec) => sec.id !== id) })),
+      moveSection: (id, dir) =>
+        set((s) => {
+          const idx = s.manuscript.findIndex((sec) => sec.id === id);
+          if (idx < 0) return {};
+          const target = idx + dir;
+          if (target < 0 || target >= s.manuscript.length) return {};
+          const next = [...s.manuscript];
+          [next[idx], next[target]] = [next[target], next[idx]];
+          return { manuscript: next };
+        }),
+      clearManuscript: () => set({ manuscript: [] }),
       clear: () => set({ messages: [], viewer: null, error: null }),
     }),
     {
       name: "openscience-session",
-      version: 4,
+      version: 5,
       migrate: (persisted) => {
         const state = persisted as {
           config?: Partial<LLMConfig>;
@@ -89,6 +121,8 @@ export const useSession = create<SessionState>()(
           viewer?: ViewerArtifact | null;
           chatCount?: number;
           scienceContext?: string;
+          manuscript?: ManuscriptSection[];
+          rightPane?: "viewer" | "inspector" | "manuscript";
         };
         return {
           config: { ...defaultConfig, ...state.config, apiKey: "" },
@@ -97,6 +131,8 @@ export const useSession = create<SessionState>()(
           viewer: state.viewer ?? null,
           chatCount: state.chatCount ?? 0,
           scienceContext: state.scienceContext ?? "",
+          manuscript: state.manuscript ?? [],
+          rightPane: state.rightPane ?? "viewer",
         };
       },
       partialize: (s) => ({
@@ -106,6 +142,8 @@ export const useSession = create<SessionState>()(
         viewer: s.viewer,
         chatCount: s.chatCount,
         scienceContext: s.scienceContext,
+        manuscript: s.manuscript,
+        rightPane: s.rightPane,
       }),
     }
   )

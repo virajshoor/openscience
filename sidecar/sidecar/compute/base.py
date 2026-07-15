@@ -19,7 +19,13 @@ class ComputeBackend(abc.ABC):
     name: str = "base"
 
     @abc.abstractmethod
-    async def run(self, command: str, timeout: int = 3600) -> RunResult:
+    async def run(
+        self,
+        command: str,
+        timeout: int = 3600,
+        cwd: str | None = None,
+        env: dict | None = None,
+    ) -> RunResult:
         ...
 
     @abc.abstractmethod

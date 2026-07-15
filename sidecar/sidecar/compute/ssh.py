@@ -42,15 +42,39 @@ class SSHBackend(ComputeBackend):
             self._client.set_missing_host_key_policy(paramiko.RejectPolicy())
             self._client.connect(self.host, port=self.port, username=self.user, key_filename=self.key_path, timeout=10)
 
-    async def run(self, command: str, timeout: int = 3600) -> RunResult:
+    async def run(
+        self,
+        command: str,
+        timeout: int = 3600,
+        cwd: str | None = None,
+        env: dict | None = None,
+    ) -> RunResult:
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._run_sync, command, timeout)
+        return await loop.run_in_executor(None, self._run_sync, command, timeout, cwd, env)
 
-    def _run_sync(self, command: str, timeout: int) -> RunResult:
+    def _run_sync(
+        self,
+        command: str,
+        timeout: int,
+        cwd: str | None = None,
+        env: dict | None = None,
+    ) -> RunResult:
         self._ensure()
-        stdin, stdout, stderr = self._client.exec_command(command, timeout=timeout)
+        wrapped = command
+        if cwd:
+            wrapped = f"cd {cwd} && {wrapped}"
+        if env:
+            prefix = " ".join(f"{k}={self._shell_quote(str(v))}" for k, v in env.items())
+            wrapped = f"env {prefix} {wrapped}"
+        stdin, stdout, stderr = self._client.exec_command(wrapped, timeout=timeout)
         exit_code = stdout.channel.recv_exit_status()
         return RunResult(exit_code, stdout.read().decode(errors="replace"), stderr.read().decode(errors="replace"))
+
+    @staticmethod
+    def _shell_quote(value: str) -> str:
+        if value.isalnum() or all(c in "/._-:" for c in value):
+            return value
+        return "'" + value.replace("'", "'\"'\"'") + "'"
 
     async def submit_slurm(self, script: str) -> dict:
         """Submit a Slurm batch script. Returns job_id."""

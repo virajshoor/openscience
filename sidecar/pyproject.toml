@@ -1,9 +1,9 @@
 [project]
 name = "openscience-sidecar"
-version = "0.1.0"
+version = "0.2.0"
 description = "OpenScience Python sidecar: LLM client, tools, compute, reproducibility"
 requires-python = ">=3.10"
-license = "AGPL-3.0-only"
+license = "MIT"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -17,6 +17,9 @@ dependencies = [
     "sse-starlette>=2.1",
     "python-multipart>=0.0.9",
     "truststore>=0.10.4",
+    # For the code.run tool: user code executes in this interpreter and may plot.
+    "matplotlib>=3.8",
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]

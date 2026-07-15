@@ -60,6 +60,25 @@ export default function RunInspector({ runId }: Props) {
   const issues = (run.review as any)?.issues || [];
   const summary = (run.review as any)?.summary;
 
+  // Scan the conversation for Slurm job submissions/results.
+  const slurmJobs: Array<{ job_id: string; tool: string; state?: string }> = [];
+  for (const entry of run.conversation ?? []) {
+    const payload = entry["payload"] as Record<string, unknown> | undefined;
+    const tool = payload?.["tool"] as string | undefined;
+    if (!tool || !String(tool).startsWith("slurm.")) continue;
+    const result = payload?.["result"] as Record<string, unknown> | undefined;
+    const data = result?.["data"] as Record<string, unknown> | undefined;
+    if (!data) continue;
+    const jobId = data["job_id"] as string | undefined;
+    if (tool === "slurm.submit" && jobId) {
+      slurmJobs.push({ job_id: jobId, tool });
+    } else if (tool === "slurm.status" && jobId) {
+      const existing = slurmJobs.find((j) => j.job_id === jobId);
+      if (existing) existing.state = data["state"] as string;
+      else slurmJobs.push({ job_id: jobId, tool, state: data["state"] as string });
+    }
+  }
+
   return (
     <div className="pane-body">
       <div className="inspector-section">
@@ -76,6 +95,13 @@ export default function RunInspector({ runId }: Props) {
         <h4>Outputs ({run.outputs?.length ?? 0})</h4>
         <pre>{(run.outputs ?? []).join("\n")}</pre>
       </div>
+
+      {slurmJobs.length > 0 && (
+        <div className="inspector-section">
+          <h4>Compute jobs</h4>
+          <pre>{slurmJobs.map((j) => `${j.job_id}: ${j.state ?? "submitted"}`).join("\n")}</pre>
+        </div>
+      )}
 
       <div className="inspector-section">
         <h4>Automated review</h4>

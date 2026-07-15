@@ -2,13 +2,17 @@
 
 An open-source scientific AI workbench. An open alternative to proprietary
 research assistants: connects to scientific databases, renders 3D protein
-structures / genome tracks / chemical structures, orchestrates compute across
-local + SSH + Slurm, and tracks every result for reproducibility.
+structures / genome tracks / chemical structures, runs and plots code locally
+or over SSH/Slurm, drafts manuscripts with real citations, and tracks every
+result for reproducibility.
 
 Works with **any OpenAI-compatible endpoint** — bring your own model: OpenAI,
 Ollama, vLLM, Together, Groq, OpenRouter, Azure OpenAI, local Llama, etc.
+Every scientific data source it talks to is a **free, no-auth public API**, and
+code runs on your own machine — so the whole stack works with **zero paid API
+keys** when paired with a local model like Ollama.
 
-Licensed under **AGPL-3.0**.
+Licensed under the **MIT License**.
 
 > **Platform support:** OpenScience currently supports **macOS on Apple Silicon (M1 or later)** only. Windows, Linux, and Intel Mac releases are not available yet.
 
@@ -16,7 +20,7 @@ Licensed under **AGPL-3.0**.
 
 ---
 
-## Architecture (v0.1)
+## Architecture (v0.2)
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -27,27 +31,40 @@ Licensed under **AGPL-3.0**.
            │ HTTP/SSE on localhost
 ┌──────────▼───────────────────────────────────────────────────┐
 │ Python sidecar (FastAPI, uv-managed)                          │
-│  • /chat       streaming agentic loop with tool dispatch      │
-│  • /tools      list registered scientific tools               │
-│  • /runs       list + read reproducibility runs               │
-│  • /review     automated reviewer (fact-check pass)          │
-│  • /compute    list + configure compute backends             │
+│  • /chat              streaming agentic loop + tool dispatch  │
+│  • /tools             list registered scientific tools (25)   │
+│  • /runs              list + read reproducibility runs        │
+│  • /review            automated reviewer (fact-check pass)    │
+│  • /compute           list + configure compute backends       │
+│  • /manuscript/export assemble + export Markdown/LaTeX/PDF    │
 │                                                               │
-│  LLM client      OpenAI-compatible; ReAct fallback           │
-│  Tools           UniProt, PDB, NCBI Entrez, ChEMBL            │
+│  LLM client      OpenAI-compatible; ReAct fallback            │
+│  Tools           25 connectors (see below)                    │
 │  Compute         Local + SSH (paramiko) + Slurm wrappers      │
-│  Recorder        per-run manifest + conversation + outputs   │
+│  Recorder        per-run manifest + conversation + outputs    │
 └───────────────────────────────────────────────────────────────┘
            ▲
            │ fetch + SSE
 ┌──────────┴───────────────────────────────────────────────────┐
 │ React UI (Vite + TypeScript + Mantine)                        │
-│  • 3-pane: Conversation | Viewer / Run Inspector              │
+│  • Conversation | Viewer / Run Inspector / Manuscript         │
 │  • Sidebar: New conversation + run history + Settings         │
-│  • Viewers: NGL (protein), FASTA/GC (genome), RDKit (chem)    │
+│  • Viewers: NGL (protein), FASTA/GC (genome), RDKit (chem),   │
+│             FigureViewer (png/svg/html/pdf from code.run)     │
 │  • Settings: endpoint URL, API key, model, tool toggle, SSH   │
 └───────────────────────────────────────────────────────────────┘
 ```
+
+### Tools (25, all free / no-auth public APIs)
+
+| Area | Tools |
+|------|-------|
+| Structures | `pdb.fetch/search`, `alphafold.fetch`, `uniprot.fetch` |
+| Genomics / variants | `entrez.search/fetch`, `ensembl.lookup/sequence/variants`, `clinvar.search/fetch`, `geo.search/fetch` |
+| Chemistry | `chembl.fetch/search` |
+| Literature | `pubmed.search/fetch`, `europepmc.search` |
+| Citations | `crossref.fetch`, `crossref.cite` (BibTeX / RIS / CSL-JSON) |
+| Code & compute | `code.run` (Python/R + figures), `compute.run`, `slurm.submit/status/cancel` |
 
 ### Reproducibility — the "Run"
 
@@ -71,13 +88,26 @@ numeric claim and citation against tool outputs. Verdicts:
 `pass` (everything traces), `flag` (some claims unverified), `fail`
 (claims contradicted). Stored in `review.json`.
 
+### Code execution, figures & manuscripts (v0.2)
+
+- **`code.run`** executes Python (or R) on the local machine or over SSH/Slurm,
+  captures stdout/stderr, and persists matplotlib/plotly figures as `figure`
+  viewer artifacts. The executed source is recorded in the run.
+- **Editable-by-chat figures**: ask "change the x-axis to log scale" and the
+  model rewrites and re-runs the plotting code — the figure updates from the
+  new source, not by editing the image.
+- **Manuscript panel**: pin assistant drafts into sections, insert figures from
+  `code.run` and citations from `crossref.cite`, then export to Markdown/LaTeX/PDF
+  (via `pandoc` when installed). The assembled manuscript and bibliography are
+  saved to the run for reproducibility.
+
 ---
 
 ## Quick start
 
 ### Install the macOS app
 
-Download the Apple Silicon DMG or `.app` ZIP from the [GitHub release](https://github.com/virajshoor/openscience/releases/tag/v0.1.0). Drag OpenScience into Applications and open it. The release contains its own sidecar, so it does not require Python or `uv`.
+Download the Apple Silicon DMG or `.app` ZIP from the [GitHub release](https://github.com/virajshoor/openscience/releases/tag/v0.2.0). Drag OpenScience into Applications and open it. The release contains its own sidecar, so it does not require Python or `uv`.
 
 The current release is unsigned. On first launch, control-click OpenScience and choose **Open** if macOS displays a Gatekeeper warning.
 
@@ -122,7 +152,7 @@ OS_SIDECAR_PORT=7100 OS_RUNS_DIR=~/.openscience/runs uv run python -m sidecar.__
 ```bash
 # Terminal 2 — quick sanity check
 curl http://127.0.0.1:7100/health
-# {"ok":true,"tools":7}
+# {"ok":true,"tools":25}
 
 curl http://127.0.0.1:7100/tools | python -m json.tool
 ```
@@ -171,14 +201,16 @@ openscience/
 │   ├── App.tsx                   # 3-pane layout + sidebar
 │   ├── components/
 │   │   ├── ChatPanel.tsx
-│   │   ├── ViewerPanel.tsx        # routes to protein/genome/chem viewer
-│   │   ├── RunInspector.tsx       # manifest + conversation + review
+│   │   ├── ViewerPanel.tsx        # routes to protein/genome/chem/figure viewer
+│   │   ├── RunInspector.tsx       # manifest + conversation + review + jobs
 │   │   ├── RunHistory.tsx
-│   │   ├── SettingsModal.tsx      # endpoint + SSH config
+│   │   ├── SettingsModal.tsx      # endpoint + compute (local/ssh/slurm) + SSH
+│   │   ├── ManuscriptPanel.tsx    # assemble + export manuscript
 │   │   └── viewers/
 │   │       ├── ProteinViewer.tsx  # NGL
-│   │       ├── GenomeViewer.tsx   # FASTA + GC tracks (v0.2: igv.js)
-│   │       └── ChemViewer.tsx     # RDKit-JS from CDN
+│   │       ├── GenomeViewer.tsx   # FASTA + GC tracks
+│   │       ├── ChemViewer.tsx     # RDKit-JS (WASM, bundled)
+│   │       └── FigureViewer.tsx   # png/svg/html/pdf from code.run
 │   ├── lib/
 │   │   ├── api.ts                 # sidecar client + SSE stream
 │   │   └── types.ts
@@ -192,10 +224,11 @@ openscience/
 │   │   │   └── reviewer.py        # automated fact-checker
 │   │   ├── tools/
 │   │   │   ├── registry.py        # @tool decorator
-│   │   │   ├── uniprot.py
-│   │   │   ├── pdb.py
-│   │   │   ├── entrez.py
-│   │   │   └── chembl.py
+│   │   │   ├── uniprot.py  pdb.py  entrez.py  chembl.py
+│   │   │   ├── code.py            # Python/R execution + figures
+│   │   │   ├── compute.py         # compute.run + slurm.*
+│   │   │   ├── ensembl.py  clinvar.py  geo.py  alphafold.py
+│   │   │   └── pubmed.py  europepmc.py  crossref.py
 │   │   ├── repro/
 │   │   │   └── recorder.py        # Run persistence
 │   │   └── compute/
@@ -240,7 +273,7 @@ return {
 }
 ```
 
-Viewer types: `protein` (NGL), `genome` (FASTA), `chem` (RDKit, SMILES).
+Viewer types: `protein` (NGL), `genome` (FASTA), `chem` (RDKit, SMILES), `figure` (png/svg/html/pdf). A tool may also return a `viewers` list to emit several artifacts at once.
 
 ---
 
@@ -255,24 +288,36 @@ pnpm tauri build
 
 ## Roadmap
 
-v0.1 (this release):
+v0.1:
 - ✓ OpenAI-compatible chat with streaming + tool dispatch
 - ✓ ReAct text-loop fallback for providers without tool-calling
-- ✓ 4 DB connectors: UniProt, PDB, NCBI Entrez, ChEMBL
+- ✓ DB connectors: UniProt, PDB, NCBI Entrez, ChEMBL
 - ✓ 3 viewers: NGL protein, FASTA+GC genome, RDKit chemistry
 - ✓ Local + SSH/Slurm compute backends
 - ✓ Reproducibility recorder with manifest + conversation + outputs
 - ✓ Automated reviewer
 
-v0.2 (planned):
-- Plugin system (DBs + viewers as drop-in modules)
-- Full igv.js genome browser
-- More databases (AlphaFold DB, Ensembl, STRING, KEGG)
-- Jupyter kernel backend for arbitrary code execution
+v0.2 (this release):
+- ✓ Code execution (`code.run`) — Python/R on local/SSH/Slurm with figures
+- ✓ Editable-by-chat figures (model rewrites plotting code, not the image)
+- ✓ FigureViewer for png/svg/html/pdf
+- ✓ Compute management tools (`compute.run`, `slurm.submit/status/cancel`)
+- ✓ New databases: Ensembl, ClinVar, GEO, AlphaFold DB
+- ✓ Literature: PubMed, Europe PMC
+- ✓ Citations: Crossref metadata + BibTeX/RIS/CSL export
+- ✓ Manuscript panel with Markdown/LaTeX/PDF export
+- ✓ 25 tools total (all free / no-auth public APIs)
+
+v0.3 (planned):
+- Native interactive genome browser tracks (igv.js)
+- Session branching (fork analyses like git branches)
+- Persistent loaded datasets across a session
+- User-created specialist agents & reusable skills
+- Approval-before-spend gate for HPC/cloud jobs
 - Multi-run diffing
 
 ---
 
 ## License
 
-AGPL-3.0-only. See [LICENSE](./LICENSE).
+MIT License. See [LICENSE](./LICENSE).

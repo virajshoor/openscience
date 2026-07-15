@@ -8,6 +8,7 @@ import ViewerPanel from "./components/ViewerPanel";
 import RunInspector from "./components/RunInspector";
 import RunHistory from "./components/RunHistory";
 import SettingsModal from "./components/SettingsModal";
+import ManuscriptPanel from "./components/ManuscriptPanel";
 import type { ChatMessage } from "./lib/types";
 
 async function discoverSidecarPort(): Promise<number | null> {
@@ -20,6 +21,42 @@ async function discoverSidecarPort(): Promise<number | null> {
   } catch {
     return null;
   }
+}
+
+/** Probe a localhost port for a healthy sidecar. */
+async function probePort(port: number): Promise<boolean> {
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/health`, { method: "GET" });
+    if (!r.ok) return false;
+    const d = await r.json();
+    return !!d?.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Robustly locate the sidecar. The Tauri shell's `sidecar_port` IPC is
+ * authoritative (it's the port THIS app picked), but it may not be ready on
+ * the first mount. If IPC fails or returns 0, scan the candidate port range
+ * for a healthy sidecar. This self-heals when port 7100 is held by a stale
+ * process and the shell had to pick a different port.
+ */
+async function findSidecarPort(currentPort: number): Promise<number | null> {
+  const ipcPort = await discoverSidecarPort();
+  if (ipcPort && ipcPort !== currentPort && await probePort(ipcPort)) {
+    return ipcPort;
+  }
+  if (ipcPort && ipcPort === currentPort) {
+    return currentPort; // already pointing at the authoritative port
+  }
+  // Scan fallback (covers browser-without-Tauri and IPC-race cases).
+  const candidates = [7100, 7101, 7102, 7103, 7104, 7105, 7106, 7107, 7108, 7109, 7110];
+  for (const p of candidates) {
+    if (p === currentPort) continue;
+    if (await probePort(p)) return p;
+  }
+  return null;
 }
 
 function conversationToMessages(run: { conversation?: Array<Record<string, unknown>> }): ChatMessage[] {
@@ -89,11 +126,21 @@ export default function App() {
   const setScienceContext = useSession((s) => s.setScienceContext);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [compounding, setCompounding] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const viewingRun = useRef(false);
+  const rightPane = useSession((s) => s.rightPane);
+  const setRightPane = useSession((s) => s.setRightPane);
 
   async function refresh() {
+    // Re-locate the sidecar in case the port changed, then check health.
+    const cur = getSidecarUrl();
+    const curPort = parseInt(cur.split(":").pop() || "7100", 10);
+    const found = await findSidecarPort(curPort);
+    if (found && found !== curPort) {
+      setSidecarUrl(`http://127.0.0.1:${found}`);
+    }
     const ok = await checkHealth();
     setSidecarOnline(ok);
     if (ok) {
@@ -107,6 +154,15 @@ export default function App() {
     let online = false;
 
     async function poll() {
+      // While offline, keep trying to (re)discover the sidecar port — the
+      // Tauri IPC may not be ready on the first mount, and port 7100 may be
+      // held by a stale process so the shell picked a different port.
+      const cur = getSidecarUrl();
+      const curPort = parseInt(cur.split(":").pop() || "7100", 10);
+      const found = await findSidecarPort(curPort);
+      if (found && found !== curPort) {
+        setSidecarUrl(`http://127.0.0.1:${found}`);
+      }
       const ok = await checkHealth();
       setSidecarOnline(ok);
       if (ok) {
@@ -307,7 +363,7 @@ Output only the synthesized context, no preamble.`;
           pushMessage({ id: crypto.randomUUID(), role: "tool", content: `${name}: ${summary}`, toolResult: result, ts: Date.now() });
         },
         onViewer: (v) => setViewer(v ?? null),
-        onDone: () => { refresh(); },
+        onDone: (runId) => { if (runId) setActiveRunId(runId); refresh(); },
         onError: (msg) => setError(msg),
       }, controller.signal);
     } catch (e) {
@@ -394,15 +450,34 @@ Output only the synthesized context, no preamble.`;
             <ChatPanel messages={messages} onSend={send} onStop={stop} streaming={streaming} error={error} />
           </div>
           <div className="pane">
-            <div className="pane-header">
-              {selectedRunId ? "Run inspector" : "Viewer"}
+            <div className="pane-header" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <select
+                value={selectedRunId ? "inspector" : rightPane}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "inspector" && !selectedRunId) return;
+                  if (v !== "inspector") setSelectedRunId(null);
+                  setRightPane(v as "viewer" | "manuscript");
+                }}
+                style={{ background: "transparent", border: "1px solid #1c2230", color: "#9ca3af", borderRadius: 4, padding: "2px 6px", fontSize: 12 }}
+              >
+                <option value="viewer">Viewer</option>
+                <option value="manuscript">Manuscript</option>
+                {selectedRunId && <option value="inspector">Run inspector</option>}
+              </select>
               {selectedRunId && (
-                <button className="btn" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => setSelectedRunId(null)}>
-                  back to viewer
+                <button className="btn" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => { setSelectedRunId(null); setRightPane("viewer"); }}>
+                  back
                 </button>
               )}
             </div>
-            {selectedRunId ? <RunInspector runId={selectedRunId} /> : <ViewerPanel />}
+            {selectedRunId ? (
+              rightPane === "manuscript" ? <ManuscriptPanel runId={selectedRunId} /> : <RunInspector runId={selectedRunId} />
+            ) : rightPane === "manuscript" ? (
+              <ManuscriptPanel runId={activeRunId} />
+            ) : (
+              <ViewerPanel />
+            )}
           </div>
         </div>
       </main>

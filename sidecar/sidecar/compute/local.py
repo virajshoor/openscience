@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 
 from .base import ComputeBackend, RunResult
@@ -11,11 +12,22 @@ from .base import ComputeBackend, RunResult
 class LocalBackend(ComputeBackend):
     name = "local"
 
-    async def run(self, command: str, timeout: int = 3600) -> RunResult:
+    async def run(
+        self,
+        command: str,
+        timeout: int = 3600,
+        cwd: str | None = None,
+        env: dict | None = None,
+    ) -> RunResult:
+        run_env = None
+        if env:
+            run_env = {**os.environ, **env}
         proc = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
+            env=run_env,
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)

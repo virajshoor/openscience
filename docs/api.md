@@ -10,7 +10,7 @@ GET /health
 
 Returns:
 ```json
-{"ok": true, "tools": 7}
+{"ok": true, "tools": 25}
 ```
 
 ## Tools
@@ -68,9 +68,11 @@ Events:
 | `token` | `{"text": "..."}` | Streaming content token |
 | `tool_call` | `{"id": "...", "name": "...", "arguments": {...}}` | Tool invoked |
 | `tool_result` | `{"id": "...", "name": "...", "result": {...}}` | Tool result |
-| `viewer` | `{"type": "protein", "src": "...", "label": "..."}` | Viewer artifact |
+| `viewer` | `{"type": "protein", "src": "...", "label": "..."}` | Viewer artifact (one event per artifact; `code.run` emits several) |
 | `error` | `{"message": "..."}` | Error occurred |
 | `done` | `{"run_id": "..."}` | Run complete |
+
+`compute` accepts `local`, `ssh`, or `slurm` (Slurm runs over the SSH transport).
 
 ## Review
 
@@ -176,4 +178,24 @@ POST /compute/ssh
 Content-Type: application/json
 
 {"host": "lab-box.university.edu", "user": "me", "port": 22, "key_path": "~/.ssh/id_rsa"}
+```
+
+## Manuscript export
+
+```
+POST /manuscript/export
+Content-Type: application/json
+
+{"markdown": "# Title\n\nBody.", "bib": "@article{...}", "format": "markdown", "run_id": "abc123def456"}
+```
+
+`format` is `markdown`, `latex`, or `pdf`. The assembled manuscript (and
+bibliography, when supplied) are saved to the run's `outputs/` for
+reproducibility. LaTeX/PDF require `pandoc` on PATH (PDF also needs a LaTeX
+engine such as `xelatex`); if absent, the endpoint falls back to Markdown with
+a `warning`.
+
+Returns:
+```json
+{"ok": true, "file": "9f8e..._manuscript.md", "format": "markdown", "download": "runs/abc123def456/outputs/9f8e..._manuscript.md"}
 ```

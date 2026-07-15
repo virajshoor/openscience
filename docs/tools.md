@@ -33,6 +33,72 @@ with the global registry.
 | `chembl.fetch` | Fetch a ChEMBL compound by ID (e.g. CHEMBL192). Returns name, SMILES, formula, weight. Signals the RDKit chemistry viewer. |
 | `chembl.search` | Search ChEMBL compounds by name. Returns up to 10 matching ChEMBL IDs. |
 
+### Code execution
+
+| Tool | Description |
+|------|-------------|
+| `code.run` | Execute Python (or R if `Rscript` is present) on the selected compute backend. Captures stdout/stderr and persists figures saved to `OPENSCIENCE_FIG_DIR` as `figure` viewer artifacts. The executed source is recorded in the run. |
+
+The tool sets `MPLBACKEND=Agg` and points `OPENSCIENCE_FIG_DIR` at a per-run
+directory. Ask the model to save figures there, e.g.
+`plt.savefig(os.path.join(os.environ['OPENSCIENCE_FIG_DIR'], 'plot.png'))`.
+Plotly HTML/PNG exports are also detected.
+
+### Compute management
+
+| Tool | Description |
+|------|-------------|
+| `compute.run` | Run an arbitrary shell command on the selected backend (local/SSH) and return stdout/stderr. |
+| `slurm.submit` | Submit a Slurm batch script on the SSH backend. Returns the job id (non-blocking). |
+| `slurm.status` | Poll a Slurm job state (PENDING/RUNNING/COMPLETED/…) on the SSH backend. |
+| `slurm.cancel` | Cancel a Slurm job (`scancel`) on the SSH backend. |
+
+Slurm requires the SSH backend — set `compute=ssh` (or `slurm`) in Settings and
+configure an SSH connection. See [compute.md](./compute.md).
+
+### Ensembl
+
+| Tool | Description |
+|------|-------------|
+| `ensembl.lookup` | Look up a human gene by symbol or Ensembl ID. Returns symbol, biotype, chromosome, coordinates. |
+| `ensembl.sequence` | Fetch a gene/transcript/protein sequence as FASTA and render it in the genome viewer. |
+| `ensembl.variants` | List variants overlapping a genomic region. |
+
+### ClinVar
+
+| Tool | Description |
+|------|-------------|
+| `clinvar.search` | Search NCBI ClinVar for clinical variants. Returns accession IDs. |
+| `clinvar.fetch` | Fetch a ClinVar variant record summary by accession. |
+
+### GEO
+
+| Tool | Description |
+|------|-------------|
+| `geo.search` | Search NCBI GEO (GDS) for expression datasets. Returns GSE/GDS IDs. |
+| `geo.fetch` | Fetch a GEO dataset summary (title, sample count, platform). |
+
+### AlphaFold DB
+
+| Tool | Description |
+|------|-------------|
+| `alphafold.fetch` | Fetch an AlphaFold predicted structure for a UniProt accession. Downloads the PDB/CIF file and renders it in the 3D protein viewer. |
+
+### Literature (PubMed / Europe PMC)
+
+| Tool | Description |
+|------|-------------|
+| `pubmed.search` | Search PubMed by query. Returns up to 10 PMIDs. |
+| `pubmed.fetch` | Fetch PubMed abstracts (title, authors, journal, year, abstract) for up to 10 PMIDs. |
+| `europepmc.search` | Search Europe PMC for papers with abstracts when available. |
+
+### Crossref (citations)
+
+| Tool | Description |
+|------|-------------|
+| `crossref.fetch` | Fetch publication metadata for a DOI (title, authors, journal, year, type). |
+| `crossref.cite` | Format one or more DOIs as a citation file (BibTeX / RIS / CSL-JSON) and save it to run outputs. Used by the manuscript feature for properly cited reports. |
+
 ## Adding a custom tool
 
 1. Create a file in `sidecar/sidecar/tools/` (e.g. `my_tool.py`).
@@ -82,3 +148,8 @@ because the API requires `^[a-zA-Z0-9_-]+$`. The sidecar maps them back for disp
 | protein  | NGL Viewer        | `src`, `label`         |
 | genome   | FASTA + GC tracks | `src`, `label`         |
 | chem     | RDKit-JS          | `smiles`, `label`      |
+| figure   | FigureViewer      | `src`, `label`, `format` (`png`/`svg`/`html`/`jpg`/`pdf`) |
+
+A tool may return a single `viewer` and/or a `viewers` list (e.g. `code.run`
+emits one figure viewer per saved figure). The client emits a `viewer` SSE
+event for each.

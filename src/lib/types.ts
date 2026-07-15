@@ -19,7 +19,8 @@ export interface ToolCall {
 export type ViewerArtifact =
   | { type: "protein"; src: string; label: string }
   | { type: "genome"; src: string; label: string }
-  | { type: "chem"; smiles: string; label: string };
+  | { type: "chem"; smiles: string; label: string }
+  | { type: "figure"; src: string; label: string; format: "png" | "svg" | "html" | "jpg" | "pdf" };
 
 export interface LLMConfig {
   baseUrl: string;

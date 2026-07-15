@@ -45,3 +45,23 @@ The SSH backend includes convenience methods for Slurm:
 | `slurm_cancel(job_id)` | Run `scancel {job_id}`. |
 | `upload(local, remote)` | SFTP put a file to the remote host. |
 | `download(remote, local)` | SFTP get a file from the remote host. |
+
+## Exposed as tools
+
+Compute is exposed to the agent through tools (see [tools.md](./tools.md)):
+
+- `compute.run` — run a shell command on the selected backend.
+- `slurm.submit` / `slurm.status` / `slurm.cancel` — manage Slurm jobs on the
+  SSH backend.
+
+Select the backend per chat via the `compute` field on `POST /chat`:
+`local`, `ssh`, or `slurm` (`slurm` uses the SSH transport and the Slurm tools).
+The Settings modal exposes the same choice.
+
+## Remote code execution (code.run over SSH)
+
+`code.run` stages execution on the SSH backend: the script is SFTP-uploaded to
+`/tmp/os_<run_id>_script.*`, executed with `MPLBACKEND=Agg` and a remote figure
+directory, then any generated figures are SFTP-downloaded back into the local
+run `outputs/` so they render in the UI and are content-addressed for
+verification. Override the remote interpreter with `OS_REMOTE_PYTHON`.

@@ -199,3 +199,22 @@ export async function persistConfig(cfg: Record<string, unknown>): Promise<void>
     // best-effort
   }
 }
+
+export async function exportManuscript(
+  markdown: string,
+  format: "markdown" | "latex" | "pdf",
+  runId: string,
+  bib?: string,
+): Promise<{ ok: boolean; download?: string; warning?: string; error?: string }> {
+  try {
+    const r = await fetch(`${u()}/manuscript/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown, bib, format, run_id: runId }),
+    });
+    if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
+    return r.json();
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}

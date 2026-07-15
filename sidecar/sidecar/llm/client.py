@@ -185,6 +185,12 @@ class LLMClient:
                 viewer = result.get("viewer") if isinstance(result, dict) else None
                 if viewer:
                     yield {"event": "viewer", "data": viewer}
+                # A tool may emit several viewers (e.g. code.run with multiple figures)
+                viewers = result.get("viewers") if isinstance(result, dict) else None
+                if isinstance(viewers, list):
+                    for v in viewers:
+                        if isinstance(v, dict) and v.get("type"):
+                            yield {"event": "viewer", "data": v}
 
                 conv.append(
                     {
