@@ -107,7 +107,7 @@ numeric claim and citation against tool outputs. Verdicts:
 
 ### Install the macOS app
 
-Download the Apple Silicon `.app` ZIP from the [GitHub release](https://github.com/virajshoor/openscience/releases/tag/v0.3.0). Drag OpenScience into Applications and open it. The release contains its own sidecar, so it does not require Python or `uv`.
+Download the Apple Silicon `.app` ZIP from the [GitHub release](https://github.com/virajshoor/openscience/releases/tag/v0.3.1). Drag OpenScience into Applications and open it. The release contains its own sidecar, so it does not require Python or `uv`.
 
 The release is **signed and notarized** with a Developer ID certificate. If you build it yourself from source it will be unsigned — see [Signing the app](#signing-the-app) below.
 

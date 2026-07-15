@@ -56,18 +56,40 @@ async def test_ensembl_sequence_emits_genome_viewer(monkeypatch, recorder):
 
 @pytest.mark.asyncio
 async def test_alphafold_fetch_emits_protein_viewer(monkeypatch, recorder):
+    metadata = [{
+        "modelEntityId": "AF-P12345-F1",
+        "pdbUrl": "https://alphafold.ebi.ac.uk/files/AF-P12345-F1-model_v6.pdb",
+        "cifUrl": "https://alphafold.ebi.ac.uk/files/AF-P12345-F1-model_v6.cif",
+        "globalMetricValue": 94.12,
+        "uniprotDescription": "Test protein",
+        "organismScientificName": "Homo sapiens",
+    }]
     pdb_bytes = b"ATOM      1  N   ALA A   1      11.000  12.000  13.000  1.00 20.00           N"
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if "prediction" in request.url.path:
-            return httpx.Response(200, json=[{"summary": {"modelConfidence": "high"}}])
+        if request.url.path.endswith("/prediction/P12345"):
+            return httpx.Response(200, json=metadata)
+        # file download
         return httpx.Response(200, content=pdb_bytes)
 
     _mock_async_client(handler, monkeypatch, [alphafold])
     run_id = recorder.start({"model": "t"})
     r = await alphafold.alphafold_fetch("P12345", recorder=recorder, run_id=run_id)
     assert r["viewer"]["type"] == "protein"
-    assert r["data"]["confidence"] == "high"
+    assert r["data"]["confidence"] == 94.12
+    assert r["data"]["model_entity_id"] == "AF-P12345-F1"
+
+
+@pytest.mark.asyncio
+async def test_alphafold_fetch_missing_prediction(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        # AlphaFold DB returns 404 + empty body for accessions it doesn't have.
+        return httpx.Response(404, json={})
+
+    _mock_async_client(handler, monkeypatch, [alphafold])
+    r = await alphafold.alphafold_fetch("Q8WZ42")
+    assert "error" in r
+    assert "no prediction" in r["error"].lower()
 
 
 @pytest.mark.asyncio

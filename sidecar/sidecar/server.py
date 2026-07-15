@@ -164,7 +164,7 @@ async def lifespan(app: FastAPI):
         state["ssh"].close()
 
 
-app = FastAPI(title="OpenScience Sidecar", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="OpenScience Sidecar", version="0.3.1", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
